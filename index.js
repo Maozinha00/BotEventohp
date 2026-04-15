@@ -26,6 +26,9 @@ function eventoAtivo() {
   return hoje <= 5;
 }
 
+// 👑 DIRETOR FIXO
+const DIRETOR_ID = "<@1477683902079303932>";
+
 // 🤖 BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -45,14 +48,14 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 🏥 PAINEL COM RESPONSÁVEL
-function painelEvento(user) {
+// 🏥 PAINEL
+function painelEvento() {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
       `👑 **RESPONSÁVEL DO EVENTO**
-${user}
+${DIRETOR_ID}
 
 ⚕️ @|⚕️| Membro HP
 
@@ -145,11 +148,10 @@ client.once("ready", async () => {
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
-    // SLASH COMMANDS
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
         return interaction.reply({
-          embeds: [painelEvento(interaction.user)],
+          embeds: [painelEvento()],
           components: [botoesEvento()]
         });
       }
