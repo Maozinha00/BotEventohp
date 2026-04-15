@@ -1,0 +1,24 @@
+{
+  "name": "hospital-bot-evento",
+  "version": "1.0.0",
+  "description": "Bot de evento hospitalar com painel de atendimentos, chamados e ranking",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "hospital",
+    "event",
+    "ranking"
+  ],
+  "author": "Hospital System",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "express": "^4.19.2"
+  }
+}
