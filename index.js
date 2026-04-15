@@ -10,18 +10,18 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🌐 ENV VARS (RAILWAY)
-const TOKEN = process.env.TOKEN || "";
-const CLIENT_ID = process.env.CLIENT_ID || "";
+// 🔐 ENV (CORRIGIDO E SEGURO)
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 
-// 🔐 SEGURANÇA
-if (!TOKEN) {
-  console.error("❌ TOKEN não encontrado nas variáveis de ambiente!");
+// 🚨 CHECAGEM FORTE (evita crash silencioso)
+if (!TOKEN || TOKEN.trim() === "") {
+  console.error("❌ TOKEN não definido nas variáveis de ambiente!");
   process.exit(1);
 }
 
-if (!CLIENT_ID) {
-  console.error("❌ CLIENT_ID não encontrado nas variáveis de ambiente!");
+if (!CLIENT_ID || CLIENT_ID.trim() === "") {
+  console.error("❌ CLIENT_ID não definido nas variáveis de ambiente!");
   process.exit(1);
 }
 
@@ -31,9 +31,7 @@ const client = new Client({
 });
 
 // 📊 BANCO EM MEMÓRIA
-const db = {
-  users: {}
-};
+const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
@@ -46,21 +44,20 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 🏥 PAINEL DO EVENTO
+// 🏥 PAINEL
 function painelEvento() {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
-      `📊 **Sistema de Pontuação Ativo**
+      `📊 Sistema de Pontuação Ativo
 
-🏥 Atendimentos: + pontos  
-📞 Chamados: + pontos  
-⏱ Horas no plantão: + bônus  
+🏥 Atendimentos  
+📞 Chamados  
+⏱ Horas  
 
-🏆 Ranking automático com base na performance!`
-    )
-    .setFooter({ text: "Hospital Bella • Sistema de Evento" });
+🏆 Ranking automático ativo`
+    );
 }
 
 // 🔘 BOTÕES
@@ -88,34 +85,33 @@ function botoesEvento() {
   );
 }
 
-// 🚀 SLASH COMMAND
+// 🚀 SLASH
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel do evento hospitalar")
-].map(cmd => cmd.toJSON());
+    .setDescription("Abrir painel do evento")
+].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 🎯 READY
+// READY
 client.once("ready", async () => {
-  console.log(`✅ Bot online como ${client.user.tag}`);
+  console.log(`✅ Online como ${client.user.tag}`);
 
   try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), {
       body: commands
     });
 
-    console.log("✅ Slash command registrado com sucesso!");
+    console.log("✅ Slash command registrado!");
   } catch (err) {
     console.error("❌ Erro ao registrar comandos:", err);
   }
 });
 
-// 🎮 INTERAÇÕES
+// INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
-    // /painel
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
         return interaction.reply({
@@ -129,66 +125,46 @@ client.on("interactionCreate", async (interaction) => {
 
     const user = getUser(interaction.user.id);
 
-    // 🏥 atendimento
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
-
-      return interaction.reply({
-        content: `🏥 Atendimento registrado! Total: **${user.atendimentos}**`,
-        ephemeral: true
-      });
+      return interaction.reply({ content: `🏥 +1 atendimento`, ephemeral: true });
     }
 
-    // 📞 chamado
     if (interaction.customId === "chamado") {
       user.chamados++;
-
-      return interaction.reply({
-        content: `📞 Chamado registrado! Total: **${user.chamados}**`,
-        ephemeral: true
-      });
+      return interaction.reply({ content: `📞 +1 chamado`, ephemeral: true });
     }
 
-    // ⏱ horas
     if (interaction.customId === "horas") {
       user.horas++;
-
-      return interaction.reply({
-        content: `⏱ Hora registrada! Total: **${user.horas}h**`,
-        ephemeral: true
-      });
+      return interaction.reply({ content: `⏱ +1 hora`, ephemeral: true });
     }
 
-    // 🏆 ranking
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
-        .sort((a, b) => {
-          const totalA = a[1].atendimentos + a[1].chamados + a[1].horas;
-          const totalB = b[1].atendimentos + b[1].chamados + b[1].horas;
-          return totalB - totalA;
-        })
+        .sort((a, b) =>
+          (b[1].atendimentos + b[1].chamados + b[1].horas) -
+          (a[1].atendimentos + a[1].chamados + a[1].horas)
+        )
         .slice(0, 5);
 
-      let texto = "🏆 **TOP 5 EVENTO HOSPITAL**\n\n";
+      let text = "🏆 TOP 5\n\n";
 
       if (ranking.length === 0) {
-        texto += "Nenhum dado registrado ainda.";
+        text += "Sem dados ainda.";
       } else {
         ranking.forEach(([id, data], i) => {
           const total = data.atendimentos + data.chamados + data.horas;
-          texto += `**${i + 1}. <@${id}>** — ${total} pontos\n`;
+          text += `${i + 1}. <@${id}> - ${total}\n`;
         });
       }
 
-      return interaction.reply({
-        content: texto,
-        ephemeral: true
-      });
+      return interaction.reply({ content: text, ephemeral: true });
     }
   } catch (err) {
-    console.error("❌ Erro na interação:", err);
+    console.error("❌ Erro interação:", err);
   }
 });
 
-// 🚀 LOGIN
+// LOGIN
 client.login(TOKEN);
