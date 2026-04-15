@@ -14,16 +14,8 @@ import {
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// 🚨 CHECAGEM FORTE (evita crash silencioso)
-if (!TOKEN || TOKEN.trim() === "") {
-  console.error("❌ TOKEN não definido nas variáveis de ambiente!");
-  process.exit(1);
-}
-
-if (!CLIENT_ID || CLIENT_ID.trim() === "") {
-  console.error("❌ CLIENT_ID não definido nas variáveis de ambiente!");
-  process.exit(1);
-}
+console.log("TOKEN:", process.env.TOKEN);
+console.log("CLIENT_ID:", process.env.CLIENT_ID);
 
 // 🤖 CLIENT
 const client = new Client({
