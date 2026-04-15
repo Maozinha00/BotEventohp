@@ -10,12 +10,20 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🔐 ENV (CORRIGIDO E SEGURO)
+// 🔐 ENV SEGURA
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
-console.log("TOKEN:", process.env.TOKEN);
-console.log("CLIENT_ID:", process.env.CLIENT_ID);
+// 🚨 CHECAGEM FORTE (evita deploy quebrado)
+if (!TOKEN || TOKEN.trim() === "") {
+  console.error("❌ TOKEN não definido no Railway");
+  process.exit(1);
+}
+
+if (!CLIENT_ID || CLIENT_ID.trim() === "") {
+  console.error("❌ CLIENT_ID não definido no Railway");
+  process.exit(1);
+}
 
 // 🤖 CLIENT
 const client = new Client({
@@ -41,15 +49,7 @@ function painelEvento() {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
-    .setDescription(
-      `📊 Sistema de Pontuação Ativo
-
-🏥 Atendimentos  
-📞 Chamados  
-⏱ Horas  
-
-🏆 Ranking automático ativo`
-    );
+    .setDescription("Sistema de pontuação ativo");
 }
 
 // 🔘 BOTÕES
@@ -86,22 +86,17 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// READY
 client.once("ready", async () => {
   console.log(`✅ Online como ${client.user.tag}`);
 
-  try {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), {
-      body: commands
-    });
+  await rest.put(Routes.applicationCommands(CLIENT_ID), {
+    body: commands
+  });
 
-    console.log("✅ Slash command registrado!");
-  } catch (err) {
-    console.error("❌ Erro ao registrar comandos:", err);
-  }
+  console.log("✅ Slash command registrado!");
 });
 
-// INTERAÇÕES
+// 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
@@ -119,17 +114,17 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
-      return interaction.reply({ content: `🏥 +1 atendimento`, ephemeral: true });
+      return interaction.reply({ content: "🏥 +1 atendimento", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
-      return interaction.reply({ content: `📞 +1 chamado`, ephemeral: true });
+      return interaction.reply({ content: "📞 +1 chamado", ephemeral: true });
     }
 
     if (interaction.customId === "horas") {
       user.horas++;
-      return interaction.reply({ content: `⏱ +1 hora`, ephemeral: true });
+      return interaction.reply({ content: "⏱ +1 hora", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -142,14 +137,10 @@ client.on("interactionCreate", async (interaction) => {
 
       let text = "🏆 TOP 5\n\n";
 
-      if (ranking.length === 0) {
-        text += "Sem dados ainda.";
-      } else {
-        ranking.forEach(([id, data], i) => {
-          const total = data.atendimentos + data.chamados + data.horas;
-          text += `${i + 1}. <@${id}> - ${total}\n`;
-        });
-      }
+      ranking.forEach(([id, data], i) => {
+        const total = data.atendimentos + data.chamados + data.horas;
+        text += `${i + 1}. <@${id}> - ${total}\n`;
+      });
 
       return interaction.reply({ content: text, ephemeral: true });
     }
@@ -158,5 +149,5 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// LOGIN
+// 🚀 LOGIN
 client.login(TOKEN);
