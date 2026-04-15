@@ -20,10 +20,9 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 📅 VERIFICA SE O EVENTO AINDA ESTÁ ATIVO (SEXTA-FEIRA = 5)
+// 📅 EVENTO ATIVO ATÉ SEXTA
 function eventoAtivo() {
-  const hoje = new Date().getDay(); 
-  // 0 domingo, 5 sexta
+  const hoje = new Date().getDay();
   return hoje <= 5;
 }
 
@@ -46,20 +45,27 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 🏥 PAINEL
-function painelEvento() {
+// 🏥 PAINEL COM RESPONSÁVEL
+function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
-      `📊 Sistema de Pontuação Ativo
+      `👑 **RESPONSÁVEL DO EVENTO**
+${user}
+
+⚕️ @|⚕️| Membro HP
+
+────────────────────
+
+📊 SISTEMA DE PONTUAÇÃO
 
 🏥 Atendimento = +1 ponto  
 📞 Chamado = +1 ponto  
 
 🏆 Ranking automático ativo`
     )
-    .setFooter({ text: "Hospital Bella • Evento ativo até sexta-feira" });
+    .setFooter({ text: "Hospital Bella • Evento Oficial" });
 }
 
 // 📖 REGRAS
@@ -87,8 +93,7 @@ Top 1, Top 2 e Top 3 recebem bônus especial.
 • Apenas ações reais contam  
 
 📅 ENCERRAMENTO:
-• O evento termina na **sexta-feira**
-• Após isso, não serão contabilizados pontos`
+• O evento termina na sexta-feira`
     )
     .setFooter({ text: "Hospital Bella • Evento Oficial" });
 }
@@ -134,16 +139,17 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("🏥 Evento ativo até sexta-feira!");
+  console.log("🏥 Evento hospital ativo!");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
+    // SLASH COMMANDS
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "painel") {
         return interaction.reply({
-          embeds: [painelEvento()],
+          embeds: [painelEvento(interaction.user)],
           components: [botoesEvento()]
         });
       }
@@ -157,7 +163,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!interaction.isButton()) return;
 
-    // 🚫 BLOQUEIO APÓS SEXTA
+    // 🚫 BLOQUEIO EVENTO
     if (!eventoAtivo()) {
       return interaction.reply({
         content: "⛔ O evento já foi encerrado!",
@@ -195,7 +201,7 @@ client.on("interactionCreate", async (interaction) => {
       let text = "🏆 **TOP 5 HOSPITAL BELLA**\n\n";
 
       if (ranking.length === 0) {
-        text += "Nenhum jogador registrado ainda.";
+        text += "Nenhum jogador ainda.";
       } else {
         ranking.forEach(([id, data], i) => {
           text += `**${i + 1}. <@${id}>** — ${data.pontos} pontos\n`;
