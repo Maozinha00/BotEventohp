@@ -20,14 +20,14 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
+// 👑 CARGO QUE VAI SER MENCIONADO (NOTIFICAÇÃO)
+const CARGO_EVENTO_ID = "1477683902079303932";
+
 // 📅 EVENTO ATIVO ATÉ SEXTA
 function eventoAtivo() {
   const hoje = new Date().getDay();
   return hoje <= 5;
 }
-
-// 👑 DIRETOR FIXO
-const DIRETOR_ID = "<@1477683902079303932>";
 
 // 🤖 BOT
 const client = new Client({
@@ -49,15 +49,15 @@ function getUser(id) {
 }
 
 // 🏥 PAINEL
-function painelEvento() {
+function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
       `👑 **RESPONSÁVEL DO EVENTO**
-${DIRETOR_ID}
+${user}
 
-⚕️ @|⚕️| Membro HP
+⚕️ <@&${CARGO_EVENTO_ID}>
 
 ────────────────────
 
@@ -68,7 +68,7 @@ ${DIRETOR_ID}
 
 🏆 Ranking automático ativo`
     )
-    .setFooter({ text: "Hospital Bella • Evento Oficial" });
+    .setFooter({ text: "Hospital Bella • Sistema de Evento" });
 }
 
 // 📖 REGRAS
@@ -89,14 +89,12 @@ Acumular pontos com atendimentos e chamados.
 🏆 Premiação:
 Top 1, Top 2 e Top 3 recebem bônus especial.
 
-⚠️ REGRAS IMPORTANTES:
-• Só vale pontos quando o Diretor estiver ONLINE  
-• Se o Diretor não estiver presente, pontos serão anulados  
-• Proibido farm de atendimentos  
+⚠️ REGRAS:
+• Só vale pontos com Diretor online  
+• Proibido farm  
 • Apenas ações reais contam  
 
-📅 ENCERRAMENTO:
-• O evento termina na sexta-feira`
+📅 Termina na sexta-feira`
     )
     .setFooter({ text: "Hospital Bella • Evento Oficial" });
 }
@@ -149,9 +147,10 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+
       if (interaction.commandName === "painel") {
         return interaction.reply({
-          embeds: [painelEvento()],
+          embeds: [painelEvento(interaction.user)],
           components: [botoesEvento()]
         });
       }
@@ -165,7 +164,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!interaction.isButton()) return;
 
-    // 🚫 BLOQUEIO EVENTO
+    // 🚫 BLOQUEIO APÓS SEXTA
     if (!eventoAtivo()) {
       return interaction.reply({
         content: "⛔ O evento já foi encerrado!",
