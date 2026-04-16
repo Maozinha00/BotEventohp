@@ -20,13 +20,13 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 👑 CARGO QUE VAI SER MENCIONADO (NOTIFICAÇÃO)
+// 👑 CARGO QUE VAI SER MENCIONADO
 const CARGO_EVENTO_ID = "1477683902079303932";
 
 // 📅 EVENTO ATIVO ATÉ SEXTA
 function eventoAtivo() {
   const hoje = new Date().getDay();
-  return hoje <= 5;
+  return hoje <= 5; // 0 domingo ... 5 sexta
 }
 
 // 🤖 BOT
@@ -34,7 +34,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// 📊 BANCO
+// 📊 BANCO SIMPLES (memória)
 const db = { users: {} };
 
 function getUser(id) {
@@ -48,25 +48,35 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 🏥 PAINEL
+// 🏥 PAINEL PRINCIPAL
 function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
-      `👑 **RESPONSÁVEL DO EVENTO**
+`👑 **RESPONSÁVEL DO EVENTO**
 ${user}
 
 ⚕️ <@&${CARGO_EVENTO_ID}>
 
 ────────────────────
 
-📊 SISTEMA DE PONTUAÇÃO
+📊 **SISTEMA DE PONTUAÇÃO**
 
-🏥 Atendimento = +1 ponto  
-📞 Chamado = +1 ponto  
+🏥 Atendimento médico → **+1 ponto**
+📞 Chamado atendido → **+1 ponto**
 
-🏆 Ranking automático ativo`
+💡 **COMO FUNCIONA**
+• Cada ação válida gera pontos automaticamente  
+• Ranking atualizado em tempo real  
+• Sistema individual por participante  
+
+🏆 **OBJETIVO**
+Conquistar o maior número de pontos até o fim do evento
+
+────────────────────
+
+⚠️ Apenas ações reais dentro do hospital contam`
     )
     .setFooter({ text: "Hospital Bella • Sistema de Evento" });
 }
@@ -77,24 +87,27 @@ function painelEventoInfo() {
     .setColor("#2ecc71")
     .setTitle("🏥 REGRAS DO EVENTO HOSPITAL BELLA")
     .setDescription(
-      `📊 EVENTO OFICIAL
+`📊 **EVENTO OFICIAL DO HOSPITAL BELLA**
 
-🏥 Objetivo:
-Acumular pontos com atendimentos e chamados.
+🏥 **OBJETIVO**
+Acumular pontos realizando atendimentos e chamados durante o evento.
 
-📞 Pontuação:
-• Atendimento = +1 ponto  
-• Chamado = +1 ponto  
+📞 **PONTUAÇÃO**
+• Atendimento médico → +1 ponto  
+• Chamado atendido → +1 ponto  
 
-🏆 Premiação:
-Top 1, Top 2 e Top 3 recebem bônus especial.
+🏆 **PREMIAÇÃO**
+• Top 1, Top 2 e Top 3 recebem bônus especial  
+• Ranking atualizado automaticamente
 
-⚠️ REGRAS:
-• Só vale pontos com Diretor online  
-• Proibido farm  
-• Apenas ações reais contam  
+⚠️ **REGRAS**
+• Somente ações com Diretor online serão validadas  
+• Proibido farm de pontos ou abuso do sistema  
+• Apenas atendimentos reais contam  
+• Fraudes podem gerar desclassificação  
 
-📅 Termina na sexta-feira`
+📅 **DURAÇÃO**
+Evento ativo até sexta-feira`
     )
     .setFooter({ text: "Hospital Bella • Evento Oficial" });
 }
@@ -119,7 +132,7 @@ function botoesEvento() {
   );
 }
 
-// 🚀 COMANDOS
+// 🚀 SLASH COMMANDS
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
@@ -136,16 +149,22 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 client.once("ready", async () => {
   console.log(`✅ Online como ${client.user.tag}`);
 
-  await rest.put(Routes.applicationCommands(CLIENT_ID), {
-    body: commands
-  });
+  try {
+    await rest.put(Routes.applicationCommands(CLIENT_ID), {
+      body: commands
+    });
 
-  console.log("🏥 Evento hospital ativo!");
+    console.log("🏥 Comandos registrados com sucesso!");
+  } catch (err) {
+    console.error("❌ Erro ao registrar comandos:", err);
+  }
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
+
+    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
@@ -162,9 +181,10 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // 📌 BOTÕES
     if (!interaction.isButton()) return;
 
-    // 🚫 BLOQUEIO APÓS SEXTA
+    // 🚫 EVENTO ENCERRADO
     if (!eventoAtivo()) {
       return interaction.reply({
         content: "⛔ O evento já foi encerrado!",
@@ -174,26 +194,29 @@ client.on("interactionCreate", async (interaction) => {
 
     const user = getUser(interaction.user.id);
 
+    // 🏥 ATENDIMENTO
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
 
       return interaction.reply({
-        content: `🏥 Atendimento registrado! +1 ponto\n📊 Total: **${user.pontos}**`,
+        content: `🏥 Atendimento registrado com sucesso! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
         ephemeral: true
       });
     }
 
+    // 📞 CHAMADO
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
 
       return interaction.reply({
-        content: `📞 Chamado registrado! +1 ponto\n📊 Total: **${user.pontos}**`,
+        content: `📞 Chamado atendido! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
         ephemeral: true
       });
     }
 
+    // 🏆 RANKING
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -202,7 +225,7 @@ client.on("interactionCreate", async (interaction) => {
       let text = "🏆 **TOP 5 HOSPITAL BELLA**\n\n";
 
       if (ranking.length === 0) {
-        text += "Nenhum jogador ainda.";
+        text += "Nenhum participante ainda.";
       } else {
         ranking.forEach(([id, data], i) => {
           text += `**${i + 1}. <@${id}>** — ${data.pontos} pontos\n`;
@@ -214,10 +237,11 @@ client.on("interactionCreate", async (interaction) => {
         ephemeral: true
       });
     }
+
   } catch (err) {
     console.error("❌ Erro:", err);
   }
 });
 
-// LOGIN
+// 🔑 LOGIN
 client.login(TOKEN);
