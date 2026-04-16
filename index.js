@@ -25,7 +25,14 @@ const CARGO_EVENTO_ID = "1477683902079303932";
 // 📌 CANAL SERVIÇO
 const CANAL_SERVICO_ID = "1490431346298851490";
 
-// 📅 HORÁRIO EVENTO
+// 🏆 PREMIAÇÃO
+const PREMIO = {
+  1: 100000,
+  2: 60000,
+  3: 30000
+};
+
+// 📅 EVENTO
 function eventoAtivo() {
   const agora = new Date();
   const inicio = new Date("2026-04-16T17:00:00");
@@ -59,34 +66,42 @@ async function estaEmServico(guild, userId) {
       msg.content?.includes(`<@${userId}>`) ||
       JSON.stringify(msg.embeds || []).includes(userId)
     );
+
   } catch {
     return false;
   }
 }
 
-// 🏥 PAINEL 1 (AÇÕES)
-function painelPrincipal(user) {
+// 🏥 PAINEL
+function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
-    .setTitle("🏥 PAINEL DE ATENDIMENTO")
+    .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
-`👑 Responsável: ${user}
+`👑 RESPONSÁVEL
+${user}
 
 ⚕️ <@&${CARGO_EVENTO_ID}>
 
 ────────────────────
 
-🏥 Atendimento = +1 ponto
-📞 Chamado = +1 ponto
+🏥 Atendimento  
+📞 Chamado  
 
-📌 Só funciona em serviço
+────────────────────
 
-⏰ 19:20 até 21:00`
+🏆 PREMIAÇÃO:
+🥇 100.000$
+🥈 60.000$
+🥉 30.000$
+
+📌 Só conta em serviço
+⏰ 17:00 - 21:00`
     )
-    .setFooter({ text: "Hospital Bella • Sistema de Pontos" });
+    .setFooter({ text: "Hospital Bella • Evento Ativo" });
 }
 
-// 📖 PAINEL 2 (INFORMAÇÕES)
+// 📖 INFO
 function painelInfo() {
   return new EmbedBuilder()
     .setColor("#2ecc71")
@@ -94,20 +109,18 @@ function painelInfo() {
     .setDescription(
 `🏥 EVENTO HOSPITAL BELLA
 
-📊 COMO FUNCIONA:
-• Atendimento = +1 ponto  
-• Chamado = +1 ponto  
+📊 SISTEMA:
+• Atendimento  
+• Chamado  
 
 ⚠️ REGRAS:
-• Só conta em serviço  
+• Só em serviço conta  
 • Proibido farm  
 • Apenas ações reais  
 
-🏆 TOP 3 recebe premiação
-
-⏰ 16/04/2026 — 19:20 até 21:00`
+🏆 TOP 3 recebe premiação`
     )
-    .setFooter({ text: "Hospital Bella • Regras Oficiais" });
+    .setFooter({ text: "Hospital Bella" });
 }
 
 // 🔘 BOTÕES
@@ -130,11 +143,11 @@ function botoes() {
   );
 }
 
-// 🚀 COMANDOS (2 PAINÉIS)
+// 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel de atendimento"),
+    .setDescription("Abrir painel do evento"),
 
   new SlashCommandBuilder()
     .setName("infoevento")
@@ -151,19 +164,18 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("🏥 2 painéis ativos!");
+  console.log("🏥 Bot atualizado!");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
         return interaction.reply({
-          embeds: [painelPrincipal(interaction.user)],
+          embeds: [painelEvento(interaction.user)],
           components: [botoes()]
         });
       }
@@ -177,15 +189,13 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!interaction.isButton()) return;
 
-    // 🚫 HORÁRIO
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não ativo (17:00 - 21:00)",
+        content: "⛔ Evento não ativo",
         ephemeral: true
       });
     }
 
-    // 🚫 SERVIÇO
     const emServico = await estaEmServico(interaction.guild, interaction.user.id);
 
     if (!emServico) {
@@ -197,38 +207,36 @@ client.on("interactionCreate", async (interaction) => {
 
     const user = getUser(interaction.user.id);
 
-    // 🏥 ATENDIMENTO
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
 
       return interaction.reply({
-        content: `🏥 Atendimento +1 ponto\nTotal: ${user.pontos}`,
+        content: `🏥 Atendimento registrado`,
         ephemeral: true
       });
     }
 
-    // 📞 CHAMADO
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
 
       return interaction.reply({
-        content: `📞 Chamado +1 ponto\nTotal: ${user.pontos}`,
+        content: `📞 Chamado registrado`,
         ephemeral: true
       });
     }
 
-    // 🏆 RANKING
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
-        .slice(0, 5);
+        .slice(0, 3);
 
-      let text = "🏆 TOP 5\n\n";
+      let text = "🏆 TOP 3\n\n";
 
       ranking.forEach(([id, data], i) => {
-        text += `${i + 1}. <@${id}> — ${data.pontos}\n`;
+        const premio = PREMIO[i + 1];
+        text += `${i + 1}. <@${id}> — ${data.pontos} pontos 💰 ${premio}$\n`;
       });
 
       return interaction.reply({
