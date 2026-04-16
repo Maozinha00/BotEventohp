@@ -14,19 +14,20 @@ import {
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// 🚨 CHECK
 if (!TOKEN || !CLIENT_ID) {
   console.error("❌ TOKEN ou CLIENT_ID não configurados");
   process.exit(1);
 }
 
-// 👑 CARGO EVENTO
+// 👑 CARGO
 const CARGO_EVENTO_ID = "1477683902079303932";
 
-// 📅 EVENTO: 16/04/2026 DAS 17:00 ATÉ 21:00
+// 📌 CANAL DO BATE-PONTO (OUTRO BOT)
+const CANAL_SERVICO_ID = "1490431346298851490";
+
+// 📅 HORÁRIO DO EVENTO
 function eventoAtivo() {
   const agora = new Date();
-
   const inicio = new Date("2026-04-16T17:00:00");
   const fim = new Date("2026-04-16T21:00:00");
 
@@ -35,87 +36,70 @@ function eventoAtivo() {
 
 // 🤖 BOT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-// 📊 BANCO EM MEMÓRIA
+// 📊 BANCO
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = {
-      atendimentos: 0,
-      chamados: 0,
-      pontos: 0
-    };
+    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
   }
   return db.users[id];
 }
 
-// 🏥 PAINEL PRINCIPAL
+// 🔍 VERIFICAR SE ESTÁ EM SERVIÇO (LENDO CANAL DO OUTRO BOT)
+async function estaEmServico(guild, userId) {
+  const channel = await guild.channels.fetch(CANAL_SERVICO_ID);
+  if (!channel) return false;
+
+  const messages = await channel.messages.fetch({ limit: 30 });
+
+  return messages.some(msg => {
+    if (!msg.content && msg.embeds.length === 0) return false;
+
+    // texto normal
+    if (msg.content.includes(userId)) return true;
+
+    // menção
+    if (msg.content.includes(`<@${userId}>`)) return true;
+
+    // embed do outro bot
+    if (msg.embeds.length > 0) {
+      const data = JSON.stringify(msg.embeds[0]);
+      if (data.includes(userId)) return true;
+    }
+
+    return false;
+  });
+}
+
+// 🏥 PAINEL
 function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
     .setTitle("🏥 EVENTO HOSPITAL BELLA")
     .setDescription(
-`👑 **RESPONSÁVEL DO EVENTO**
+`👑 RESPONSÁVEL
 ${user}
 
 ⚕️ <@&${CARGO_EVENTO_ID}>
 
 ────────────────────
 
-📊 **SISTEMA DE PONTUAÇÃO**
+🏥 Atendimento = +1 ponto
+📞 Chamado = +1 ponto
 
-🏥 Atendimento médico → **+1 ponto**
-📞 Chamado atendido → **+1 ponto**
+📌 Só conta se estiver EM SERVIÇO
 
-💡 **COMO FUNCIONA**
-• Cada ação válida gera pontos automaticamente  
-• Ranking em tempo real  
-• Sistema individual por participante  
-
-🏆 **OBJETIVO**
-Conquistar o maior número de pontos
-
-────────────────────
-
-📅 **HORÁRIO DO EVENTO**
-16/04/2026 — 17:00 até 21:00
-
-⚠️ Apenas ações reais dentro do hospital contam`
+📅 16/04/2026 — 17:00 até 21:00`
     )
-    .setFooter({ text: "Hospital Bella • Evento Ativo" });
-}
-
-// 📖 REGRAS
-function painelEventoInfo() {
-  return new EmbedBuilder()
-    .setColor("#2ecc71")
-    .setTitle("🏥 REGRAS DO EVENTO HOSPITAL BELLA")
-    .setDescription(
-`📊 **EVENTO OFICIAL**
-
-🏥 **OBJETIVO**
-Acumular pontos com atendimentos e chamados dentro do horário do evento.
-
-📞 **PONTUAÇÃO**
-• Atendimento → +1 ponto  
-• Chamado → +1 ponto  
-
-🏆 **PREMIAÇÃO**
-Top 3 recebem premiação especial
-
-⚠️ **REGRAS**
-• Só conta dentro do horário (17:00–21:00)  
-• Proibido farm de pontos  
-• Apenas ações reais contam  
-• Fraude = desclassificação
-
-📅 **HORÁRIO**
-16/04/2026 — 17:00 até 21:00`
-    )
-    .setFooter({ text: "Hospital Bella • Evento Oficial" });
+    .setFooter({ text: "Hospital Bella" });
 }
 
 // 🔘 BOTÕES
@@ -142,11 +126,7 @@ function botoesEvento() {
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel do evento hospitalar"),
-
-  new SlashCommandBuilder()
-    .setName("painelevento")
-    .setDescription("Ver regras do evento hospitalar")
+    .setDescription("Abrir painel do evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -159,7 +139,7 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("🏥 Evento configurado com horário 17:00–21:00!");
+  console.log("🏥 Bot do evento ativo!");
 });
 
 // 🎮 INTERAÇÕES
@@ -167,27 +147,30 @@ client.on("interactionCreate", async (interaction) => {
   try {
 
     if (interaction.isChatInputCommand()) {
-
       if (interaction.commandName === "painel") {
         return interaction.reply({
           embeds: [painelEvento(interaction.user)],
           components: [botoesEvento()]
         });
       }
-
-      if (interaction.commandName === "painelevento") {
-        return interaction.reply({
-          embeds: [painelEventoInfo()]
-        });
-      }
     }
 
     if (!interaction.isButton()) return;
 
-    // 🚫 FORA DO HORÁRIO
+    // 🚫 HORÁRIO
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ O evento só funciona das 17:00 até 21:00!",
+        content: "⛔ Evento não está ativo (17:00 - 21:00)",
+        ephemeral: true
+      });
+    }
+
+    // 🚫 VERIFICA SERVIÇO NO OUTRO BOT
+    const emServico = await estaEmServico(interaction.guild, interaction.user.id);
+
+    if (!emServico) {
+      return interaction.reply({
+        content: "🚫 Você precisa estar EM SERVIÇO para ganhar pontos!",
         ephemeral: true
       });
     }
@@ -200,7 +183,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `🏥 Atendimento registrado! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
+        content: `🏥 Atendimento registrado! +1 ponto\nTotal: **${user.pontos}**`,
         ephemeral: true
       });
     }
@@ -211,7 +194,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `📞 Chamado registrado! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
+        content: `📞 Chamado registrado! +1 ponto\nTotal: **${user.pontos}**`,
         ephemeral: true
       });
     }
@@ -222,15 +205,11 @@ client.on("interactionCreate", async (interaction) => {
         .sort((a, b) => b[1].pontos - a[1].pontos)
         .slice(0, 5);
 
-      let text = "🏆 **TOP 5 HOSPITAL BELLA**\n\n";
+      let text = "🏆 TOP 5 HOSPITAL BELLA\n\n";
 
-      if (ranking.length === 0) {
-        text += "Nenhum participante ainda.";
-      } else {
-        ranking.forEach(([id, data], i) => {
-          text += `**${i + 1}. <@${id}>** — ${data.pontos} pontos\n`;
-        });
-      }
+      ranking.forEach(([id, data], i) => {
+        text += `${i + 1}. <@${id}> — ${data.pontos} pontos\n`;
+      });
 
       return interaction.reply({
         content: text,
@@ -239,7 +218,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
   } catch (err) {
-    console.error("❌ Erro:", err);
+    console.error(err);
   }
 });
 
