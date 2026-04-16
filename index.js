@@ -81,7 +81,7 @@ function painelPrincipal(user) {
 
 📌 Só funciona em serviço
 
-⏰ 17:00 até 21:00`
+⏰ 19:20 até 21:00`
     )
     .setFooter({ text: "Hospital Bella • Sistema de Pontos" });
 }
@@ -105,7 +105,7 @@ function painelInfo() {
 
 🏆 TOP 3 recebe premiação
 
-⏰ 16/04/2026 — 17:00 até 21:00`
+⏰ 16/04/2026 — 19:20 até 21:00`
     )
     .setFooter({ text: "Hospital Bella • Regras Oficiais" });
 }
