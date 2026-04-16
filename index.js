@@ -20,13 +20,17 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 👑 CARGO QUE VAI SER MENCIONADO
+// 👑 CARGO EVENTO
 const CARGO_EVENTO_ID = "1477683902079303932";
 
-// 📅 EVENTO ATIVO ATÉ SEXTA
+// 📅 EVENTO: 16/04/2026 DAS 17:00 ATÉ 21:00
 function eventoAtivo() {
-  const hoje = new Date().getDay();
-  return hoje <= 5; // 0 domingo ... 5 sexta
+  const agora = new Date();
+
+  const inicio = new Date("2026-04-16T17:00:00");
+  const fim = new Date("2026-04-16T21:00:00");
+
+  return agora >= inicio && agora <= fim;
 }
 
 // 🤖 BOT
@@ -34,7 +38,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// 📊 BANCO SIMPLES (memória)
+// 📊 BANCO EM MEMÓRIA
 const db = { users: {} };
 
 function getUser(id) {
@@ -68,17 +72,20 @@ ${user}
 
 💡 **COMO FUNCIONA**
 • Cada ação válida gera pontos automaticamente  
-• Ranking atualizado em tempo real  
+• Ranking em tempo real  
 • Sistema individual por participante  
 
 🏆 **OBJETIVO**
-Conquistar o maior número de pontos até o fim do evento
+Conquistar o maior número de pontos
 
 ────────────────────
 
+📅 **HORÁRIO DO EVENTO**
+16/04/2026 — 17:00 até 21:00
+
 ⚠️ Apenas ações reais dentro do hospital contam`
     )
-    .setFooter({ text: "Hospital Bella • Sistema de Evento" });
+    .setFooter({ text: "Hospital Bella • Evento Ativo" });
 }
 
 // 📖 REGRAS
@@ -87,27 +94,26 @@ function painelEventoInfo() {
     .setColor("#2ecc71")
     .setTitle("🏥 REGRAS DO EVENTO HOSPITAL BELLA")
     .setDescription(
-`📊 **EVENTO OFICIAL DO HOSPITAL BELLA**
+`📊 **EVENTO OFICIAL**
 
 🏥 **OBJETIVO**
-Acumular pontos realizando atendimentos e chamados durante o evento.
+Acumular pontos com atendimentos e chamados dentro do horário do evento.
 
 📞 **PONTUAÇÃO**
-• Atendimento médico → +1 ponto  
-• Chamado atendido → +1 ponto  
+• Atendimento → +1 ponto  
+• Chamado → +1 ponto  
 
 🏆 **PREMIAÇÃO**
-• Top 1, Top 2 e Top 3 recebem bônus especial  
-• Ranking atualizado automaticamente
+Top 3 recebem premiação especial
 
 ⚠️ **REGRAS**
-• Somente ações com Diretor online serão validadas  
-• Proibido farm de pontos ou abuso do sistema  
-• Apenas atendimentos reais contam  
-• Fraudes podem gerar desclassificação  
+• Só conta dentro do horário (17:00–21:00)  
+• Proibido farm de pontos  
+• Apenas ações reais contam  
+• Fraude = desclassificação
 
-📅 **DURAÇÃO**
-Evento ativo até sexta-feira`
+📅 **HORÁRIO**
+16/04/2026 — 17:00 até 21:00`
     )
     .setFooter({ text: "Hospital Bella • Evento Oficial" });
 }
@@ -132,7 +138,7 @@ function botoesEvento() {
   );
 }
 
-// 🚀 SLASH COMMANDS
+// 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
@@ -149,22 +155,17 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 client.once("ready", async () => {
   console.log(`✅ Online como ${client.user.tag}`);
 
-  try {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), {
-      body: commands
-    });
+  await rest.put(Routes.applicationCommands(CLIENT_ID), {
+    body: commands
+  });
 
-    console.log("🏥 Comandos registrados com sucesso!");
-  } catch (err) {
-    console.error("❌ Erro ao registrar comandos:", err);
-  }
+  console.log("🏥 Evento configurado com horário 17:00–21:00!");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painel") {
@@ -181,13 +182,12 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
-    // 📌 BOTÕES
     if (!interaction.isButton()) return;
 
-    // 🚫 EVENTO ENCERRADO
+    // 🚫 FORA DO HORÁRIO
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ O evento já foi encerrado!",
+        content: "⛔ O evento só funciona das 17:00 até 21:00!",
         ephemeral: true
       });
     }
@@ -200,7 +200,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `🏥 Atendimento registrado com sucesso! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
+        content: `🏥 Atendimento registrado! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
         ephemeral: true
       });
     }
@@ -211,7 +211,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `📞 Chamado atendido! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
+        content: `📞 Chamado registrado! +1 ponto\n📊 Total: **${user.pontos} pontos**`,
         ephemeral: true
       });
     }
