@@ -19,116 +19,95 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 👑 CARGO EVENTO
+// 👑 CARGO
 const CARGO_EVENTO_ID = "1477683902079303932";
 
-// 📌 CANAL DO BATE-PONTO (OUTRO BOT)
+// 📌 CANAL SERVIÇO
 const CANAL_SERVICO_ID = "1490431346298851490";
 
-// 📅 EVENTO 16/04/2026 - 17:00 até 21:00
+// 📅 HORÁRIO EVENTO
 function eventoAtivo() {
   const agora = new Date();
   const inicio = new Date("2026-04-16T17:00:00");
   const fim = new Date("2026-04-16T21:00:00");
-
   return agora >= inicio && agora <= fim;
 }
 
-// 🤖 CLIENTE (SEM INTENTS PROBLEMÁTICOS)
+// 🤖 BOT
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-// 📊 DB EM MEMÓRIA
+// 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = {
-      atendimentos: 0,
-      chamados: 0,
-      pontos: 0
-    };
+    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
   }
   return db.users[id];
 }
 
-// 🔍 VERIFICAR SERVIÇO PELO CANAL
+// 🔍 SERVIÇO
 async function estaEmServico(guild, userId) {
   try {
     const channel = await guild.channels.fetch(CANAL_SERVICO_ID);
-    if (!channel) return false;
-
     const messages = await channel.messages.fetch({ limit: 30 });
 
-    return messages.some(msg => {
-      if (!msg) return false;
-
-      if (msg.content?.includes(userId)) return true;
-      if (msg.content?.includes(`<@${userId}>`)) return true;
-
-      if (msg.embeds?.length > 0) {
-        const data = JSON.stringify(msg.embeds[0]);
-        if (data.includes(userId)) return true;
-      }
-
-      return false;
-    });
-
-  } catch (err) {
-    console.error("Erro check serviço:", err);
+    return messages.some(msg =>
+      msg.content?.includes(userId) ||
+      msg.content?.includes(`<@${userId}>`) ||
+      JSON.stringify(msg.embeds || []).includes(userId)
+    );
+  } catch {
     return false;
   }
 }
 
-// 🏥 PAINEL
-function painelEvento(user) {
+// 🏥 PAINEL 1 (AÇÕES)
+function painelPrincipal(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
-    .setTitle("🏥 EVENTO HOSPITAL BELLA")
+    .setTitle("🏥 PAINEL DE ATENDIMENTO")
     .setDescription(
-`👑 RESPONSÁVEL
-${user}
+`👑 Responsável: ${user}
 
 ⚕️ <@&${CARGO_EVENTO_ID}>
 
 ────────────────────
 
-🏥 Atendimento → +1 ponto
-📞 Chamado → +1 ponto
+🏥 Atendimento = +1 ponto
+📞 Chamado = +1 ponto
 
-📌 Só conta se estiver EM SERVIÇO
+📌 Só funciona em serviço
 
-📅 17:00 - 21:00 (16/04/2026)`
+⏰ 17:00 até 21:00`
     )
-    .setFooter({ text: "Hospital Bella • Sistema de Evento" });
+    .setFooter({ text: "Hospital Bella • Sistema de Pontos" });
 }
 
-// 📖 REGRAS
-function painelRegras() {
+// 📖 PAINEL 2 (INFORMAÇÕES)
+function painelInfo() {
   return new EmbedBuilder()
     .setColor("#2ecc71")
-    .setTitle("🏥 REGRAS DO EVENTO")
+    .setTitle("📖 INFORMAÇÕES DO EVENTO")
     .setDescription(
-`📊 EVENTO OFICIAL
+`🏥 EVENTO HOSPITAL BELLA
 
-🏥 OBJETIVO:
-Ganhar pontos com atendimento e chamados.
-
-📞 PONTOS:
-• Atendimento = +1
-• Chamado = +1
+📊 COMO FUNCIONA:
+• Atendimento = +1 ponto  
+• Chamado = +1 ponto  
 
 ⚠️ REGRAS:
-• Só conta em serviço
-• Proibido farm
-• Apenas ações reais
+• Só conta em serviço  
+• Proibido farm  
+• Apenas ações reais  
 
-📅 16/04/2026 - 17:00 até 21:00`
+🏆 TOP 3 recebe premiação
+
+⏰ 16/04/2026 — 17:00 até 21:00`
     )
-    .setFooter({ text: "Hospital Bella" });
+    .setFooter({ text: "Hospital Bella • Regras Oficiais" });
 }
 
 // 🔘 BOTÕES
@@ -151,11 +130,15 @@ function botoes() {
   );
 }
 
-// 🚀 SLASH COMMAND
+// 🚀 COMANDOS (2 PAINÉIS)
 const commands = [
   new SlashCommandBuilder()
     .setName("painel")
-    .setDescription("Abrir painel do evento")
+    .setDescription("Abrir painel de atendimento"),
+
+  new SlashCommandBuilder()
+    .setName("infoevento")
+    .setDescription("Ver informações do evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -168,18 +151,26 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("🏥 Bot hospital ativo!");
+  console.log("🏥 2 painéis ativos!");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
+
       if (interaction.commandName === "painel") {
         return interaction.reply({
-          embeds: [painelEvento(interaction.user)],
+          embeds: [painelPrincipal(interaction.user)],
           components: [botoes()]
+        });
+      }
+
+      if (interaction.commandName === "infoevento") {
+        return interaction.reply({
+          embeds: [painelInfo()]
         });
       }
     }
@@ -189,12 +180,12 @@ client.on("interactionCreate", async (interaction) => {
     // 🚫 HORÁRIO
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não está ativo (17:00 - 21:00)",
+        content: "⛔ Evento não ativo (17:00 - 21:00)",
         ephemeral: true
       });
     }
 
-    // 🚫 CHECAR SERVIÇO
+    // 🚫 SERVIÇO
     const emServico = await estaEmServico(interaction.guild, interaction.user.id);
 
     if (!emServico) {
@@ -212,7 +203,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `🏥 Atendimento registrado +1 ponto\nTotal: ${user.pontos}`,
+        content: `🏥 Atendimento +1 ponto\nTotal: ${user.pontos}`,
         ephemeral: true
       });
     }
@@ -223,7 +214,7 @@ client.on("interactionCreate", async (interaction) => {
       user.pontos++;
 
       return interaction.reply({
-        content: `📞 Chamado registrado +1 ponto\nTotal: ${user.pontos}`,
+        content: `📞 Chamado +1 ponto\nTotal: ${user.pontos}`,
         ephemeral: true
       });
     }
@@ -234,15 +225,11 @@ client.on("interactionCreate", async (interaction) => {
         .sort((a, b) => b[1].pontos - a[1].pontos)
         .slice(0, 5);
 
-      let text = "🏆 TOP 5 HOSPITAL BELLA\n\n";
+      let text = "🏆 TOP 5\n\n";
 
-      if (ranking.length === 0) {
-        text += "Nenhum jogador ainda.";
-      } else {
-        ranking.forEach(([id, data], i) => {
-          text += `${i + 1}. <@${id}> — ${data.pontos} pontos\n`;
-        });
-      }
+      ranking.forEach(([id, data], i) => {
+        text += `${i + 1}. <@${id}> — ${data.pontos}\n`;
+      });
 
       return interaction.reply({
         content: text,
@@ -251,7 +238,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
   } catch (err) {
-    console.error("Erro:", err);
+    console.error(err);
   }
 });
 
