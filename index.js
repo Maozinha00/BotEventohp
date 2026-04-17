@@ -35,12 +35,12 @@ const PREMIO = {
   3: 30000
 };
 
-// 🔥 EVENTO (AGORA MANUAL)
-let eventoAberto = false;
+// 🔥 STATUS DO EVENTO
+let eventoStatus = "fechado"; 
+// fechado | aberto | cancelado
 
-// ✔ EVENTO ATIVO
 function eventoAtivo() {
-  return eventoAberto;
+  return eventoStatus === "aberto";
 }
 
 // 🤖 BOT
@@ -53,7 +53,7 @@ const client = new Client({
   ]
 });
 
-// 📊 DB (memória)
+// 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
@@ -107,17 +107,15 @@ ${user}
 
 // 📢 INFO EVENTO
 function painelInfo() {
-  const status = eventoAtivo()
-    ? "🟢 EVENTO ABERTO AGORA!"
-    : "🔴 EVENTO FECHADO";
+  let statusTexto = "";
 
-  const agora = new Date();
-
-  const brasil = new Date(
-    new Date().toLocaleString("en-US", {
-      timeZone: "America/Sao_Paulo"
-    })
-  );
+  if (eventoStatus === "aberto") {
+    statusTexto = "🟢 EVENTO ABERTO AGORA!";
+  } else if (eventoStatus === "fechado") {
+    statusTexto = "🔴 EVENTO FECHADO";
+  } else {
+    statusTexto = "🟥 EVENTO CANCELADO";
+  }
 
   return new EmbedBuilder()
     .setColor("#ff0000")
@@ -125,16 +123,14 @@ function painelInfo() {
     .setDescription(
 `🚨 **ATENÇÃO EQUIPE MÉDICA** 🚨
 
-📍 Agora: ${brasil.toLocaleString("pt-BR")}
-
-${status}
+${statusTexto}
 
 ━━━━━━━━━━━━━━━━━━━
 
 🏥 COMO PARTICIPAR
-• Atendimentos  
+• Atendimento  
 • Chamados  
-• Em serviço  
+• Estar em serviço  
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -142,8 +138,6 @@ ${status}
 🥇 100.000$  
 🥈 60.000$  
 🥉 30.000$  
-
-━━━━━━━━━━━━━━━━━━━
 
 🔥 Boa sorte!`
     )
@@ -186,7 +180,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("fecharevento")
-    .setDescription("Fechar evento")
+    .setDescription("Fechar evento"),
+
+  new SlashCommandBuilder()
+    .setName("eventocancelado")
+    .setDescription("Cancelar evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -206,11 +204,13 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+
     // 🔹 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "abrirevento") {
-        eventoAberto = true;
+        eventoStatus = "aberto";
         return interaction.reply({
           content: "🟢 Evento ABERTO!",
           ephemeral: true
@@ -218,9 +218,17 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (interaction.commandName === "fecharevento") {
-        eventoAberto = false;
+        eventoStatus = "fechado";
         return interaction.reply({
           content: "🔴 Evento FECHADO!",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.commandName === "eventocancelado") {
+        eventoStatus = "cancelado";
+        return interaction.reply({
+          content: "🟥 Evento cancelado oficialmente pela administração. Aguarde novas informações.",
           ephemeral: true
         });
       }
@@ -244,7 +252,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento fechado",
+        content: "⛔ Evento não está ativo",
         ephemeral: true
       });
     }
@@ -262,7 +270,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!emServico) {
       return interaction.reply({
-        content: "🚫 Não está registrado no serviço!",
+        content: "🚫 Você não registrou serviço no canal!",
         ephemeral: true
       });
     }
@@ -272,19 +280,13 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
-      return interaction.reply({
-        content: "🏥 Atendimento registrado",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
-      return interaction.reply({
-        content: "📞 Chamado registrado",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
