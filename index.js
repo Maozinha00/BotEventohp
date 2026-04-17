@@ -35,8 +35,8 @@ const PREMIO = {
 // 📅 EVENTO
 function eventoAtivo() {
   const agora = new Date();
-  const inicio = new Date("2026-04-16T17:00:00");
-  const fim = new Date("2026-04-16T21:00:00");
+  const inicio = new Date("2026-04-17T17:00:00");
+  const fim = new Date("2026-04-17T21:00:00");
   return agora >= inicio && agora <= fim;
 }
 
@@ -146,7 +146,7 @@ function botoes() {
 // 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder()
-    .setName("painel")
+    .setName("painelevento")
     .setDescription("Abrir painel do evento"),
 
   new SlashCommandBuilder()
