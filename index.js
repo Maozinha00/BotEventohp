@@ -1,4 +1,4 @@
-import "dotenv/config"; // funciona no PC, Railway ignora se não tiver .env
+import "dotenv/config";
 
 import {
   Client,
@@ -35,12 +35,37 @@ const PREMIO = {
   3: 30000
 };
 
-// 📅 EVENTO (17/04/2026)
+// 📅 EVENTO CONFIG
+const DATA_EVENTO = "17/04/2026";
+const HORA_INICIO = "19:00";
+const HORA_FIM = "21:00";
+
+// ⏰ EVENTO (DIA + HORA BRASIL)
 function eventoAtivo() {
   const agora = new Date();
-  const inicio = new Date("2026-04-17T19:00:00");
-  const fim = new Date("2026-04-17T21:00:00");
-  return agora >= inicio && agora <= fim;
+
+  const brasil = new Date(
+    agora.toLocaleString("en-US", {
+      timeZone: "America/Sao_Paulo"
+    })
+  );
+
+  const dia = brasil.getDate();
+  const mes = brasil.getMonth() + 1;
+  const ano = brasil.getFullYear();
+
+  // 📅 só dia 17/04/2026
+  if (dia !== 17 || mes !== 4 || ano !== 2026) {
+    return false;
+  }
+
+  const inicio = new Date(brasil);
+  inicio.setHours(19, 0, 0, 0);
+
+  const fim = new Date(brasil);
+  fim.setHours(21, 0, 0, 0);
+
+  return brasil >= inicio && brasil <= fim;
 }
 
 // 🤖 BOT
@@ -48,21 +73,17 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// 📊 BANCO SIMPLES
+// 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = {
-      atendimentos: 0,
-      chamados: 0,
-      pontos: 0
-    };
+    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
   }
   return db.users[id];
 }
 
-// 🔍 VERIFICAR SERVIÇO
+// 🔍 SERVIÇO
 async function estaEmServico(guild, userId) {
   try {
     const channel = await guild.channels.fetch(CANAL_SERVICO_ID);
@@ -79,7 +100,7 @@ async function estaEmServico(guild, userId) {
   }
 }
 
-// 🏥 PAINEL PRINCIPAL
+// 🏥 PAINEL
 function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
@@ -95,36 +116,70 @@ ${user}
 📞 Chamado  
 ━━━━━━━━━━━━━━━━━━━
 
-🏆 PREMIAÇÃO:
+🏆 PREMIAÇÃO
 🥇 100.000$
 🥈 60.000$
 🥉 30.000$
 
-📌 Só conta em serviço
-⏰ 19:00 às 21:00`
+📌 Só conta em serviço`
     );
 }
 
-// 📖 SEGUNDA DESCRIÇÃO (INFO)
+// 📢 ANÚNCIO
 function painelInfo() {
+  const agora = new Date();
+
+  const brasil = new Date(
+    agora.toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo"
+    })
+  );
+
+  const dataAtual = brasil.toLocaleDateString("pt-BR");
+  const horaAtual = brasil.toLocaleTimeString("pt-BR");
+
+  const status = eventoAtivo()
+    ? "🟢 EVENTO LIBERADO AGORA!"
+    : "🔴 EVENTO FECHADO";
+
   return new EmbedBuilder()
-    .setColor("#2ecc71")
-    .setTitle("📖 INFORMAÇÕES DO EVENTO")
+    .setColor("#ff0000")
+    .setTitle("📢 GRANDE EVENTO HOSPITAL BELLA")
     .setDescription(
-`🏥 EVENTO HOSPITAL BELLA
+`🚨 **ATENÇÃO EQUIPE MÉDICA** 🚨
 
-📊 SISTEMA:
-• Atendimento
-• Chamado
+📅 **Data:** ${DATA_EVENTO}  
+⏰ **Horário:** ${HORA_INICIO} às ${HORA_FIM}  
 
-⚠️ REGRAS:
-• Apenas em serviço conta
-• Proibido farm
-• Apenas ações reais
+📍 **Agora:** ${dataAtual} • ${horaAtual}
 
-🏆 PREMIAÇÃO:
-TOP 3 recebe dinheiro`
-    );
+${status}
+
+━━━━━━━━━━━━━━━━━━━
+
+🏥 **COMO PARTICIPAR**
+• Realize atendimentos  
+• Atenda chamados  
+• Esteja em serviço  
+
+━━━━━━━━━━━━━━━━━━━
+
+🏆 **PREMIAÇÃO**
+🥇 1º — 100.000$  
+🥈 2º — 60.000$  
+🥉 3º — 30.000$  
+
+━━━━━━━━━━━━━━━━━━━
+
+⚠️ **REGRAS**
+• Obrigatório estar em serviço  
+• Proibido farm  
+• Apenas ações reais  
+
+🔥 **Boa sorte!**`
+    )
+    .setFooter({ text: "Hospital Bella • Evento automático" })
+    .setTimestamp();
 }
 
 // 🔘 BOTÕES
@@ -149,18 +204,13 @@ function botoes() {
 
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder()
-    .setName("painelevento")
-    .setDescription("Abrir painel do evento"),
-
-  new SlashCommandBuilder()
-    .setName("infoevento")
-    .setDescription("Ver informações do evento")
+  new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
+  new SlashCommandBuilder().setName("infoevento").setDescription("Ver anúncio do evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ✅ ONLINE
+// ✅ READY
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
 
@@ -168,14 +218,13 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("✅ Comandos carregados");
+  console.log("✅ Comandos registrados");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painelevento") {
@@ -194,25 +243,22 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!interaction.isButton()) return;
 
-    // ⛔ Evento fora
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não está ativo agora",
+        content: "⛔ Evento não está ativo",
         ephemeral: true
       });
     }
 
-    // 🔍 Cargo
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
     if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
       return interaction.reply({
-        content: "🚫 Você não está no cargo de serviço!",
+        content: "🚫 Você não está em serviço!",
         ephemeral: true
       });
     }
 
-    // 🔍 Serviço
     const emServico = await estaEmServico(interaction.guild, interaction.user.id);
 
     if (!emServico) {
@@ -224,29 +270,18 @@ client.on("interactionCreate", async (interaction) => {
 
     const user = getUser(interaction.user.id);
 
-    // 🏥 Atendimento
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
-
-      return interaction.reply({
-        content: "🏥 Atendimento registrado",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
     }
 
-    // 📞 Chamado
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
-
-      return interaction.reply({
-        content: "📞 Chamado registrado",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
     }
 
-    // 🏆 Ranking
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -269,5 +304,4 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// 🔑 LOGIN
 client.login(TOKEN);
