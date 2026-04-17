@@ -1,4 +1,5 @@
-import "dotenv/config";
+import "dotenv/config"; // funciona no PC, Railway ignora se não tiver .env
+
 import {
   Client,
   GatewayIntentBits,
@@ -47,12 +48,16 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// 📊 DB (simples memória)
+// 📊 BANCO SIMPLES
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
+    db.users[id] = {
+      atendimentos: 0,
+      chamados: 0,
+      pontos: 0
+    };
   }
   return db.users[id];
 }
@@ -74,7 +79,7 @@ async function estaEmServico(guild, userId) {
   }
 }
 
-// 🏥 PAINEL
+// 🏥 PAINEL PRINCIPAL
 function painelEvento(user) {
   return new EmbedBuilder()
     .setColor("#00AEEF")
@@ -85,33 +90,40 @@ ${user}
 
 ⚕️ <@&${CARGO_EVENTO_ID}>
 
-────────────────────
+━━━━━━━━━━━━━━━━━━━
 🏥 Atendimento  
 📞 Chamado  
-────────────────────
+━━━━━━━━━━━━━━━━━━━
 
-🏆 PREMIAÇÃO
+🏆 PREMIAÇÃO:
 🥇 100.000$
 🥈 60.000$
 🥉 30.000$
 
-📌 Só conta em serviço`
+📌 Só conta em serviço
+⏰ 19:00 às 21:00`
     );
 }
 
-// 📖 INFO
+// 📖 SEGUNDA DESCRIÇÃO (INFO)
 function painelInfo() {
   return new EmbedBuilder()
     .setColor("#2ecc71")
-    .setTitle("📖 INFORMAÇÕES")
+    .setTitle("📖 INFORMAÇÕES DO EVENTO")
     .setDescription(
-`• Atendimento
+`🏥 EVENTO HOSPITAL BELLA
+
+📊 SISTEMA:
+• Atendimento
 • Chamado
 
-⚠️ Apenas em serviço
-⚠️ Sem farm
+⚠️ REGRAS:
+• Apenas em serviço conta
+• Proibido farm
+• Apenas ações reais
 
-🏆 TOP 3 ganha prêmio`
+🏆 PREMIAÇÃO:
+TOP 3 recebe dinheiro`
     );
 }
 
@@ -137,13 +149,18 @@ function botoes() {
 
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
-  new SlashCommandBuilder().setName("infoevento").setDescription("Info evento")
+  new SlashCommandBuilder()
+    .setName("painelevento")
+    .setDescription("Abrir painel do evento"),
+
+  new SlashCommandBuilder()
+    .setName("infoevento")
+    .setDescription("Ver informações do evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// READY
+// ✅ ONLINE
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
 
@@ -151,14 +168,14 @@ client.once("ready", async () => {
     body: commands
   });
 
-  console.log("✅ Comandos registrados");
+  console.log("✅ Comandos carregados");
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // COMANDOS
+    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (interaction.commandName === "painelevento") {
@@ -177,10 +194,10 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!interaction.isButton()) return;
 
-    // ⛔ Evento
+    // ⛔ Evento fora
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não ativo",
+        content: "⛔ Evento não está ativo agora",
         ephemeral: true
       });
     }
@@ -190,17 +207,17 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
       return interaction.reply({
-        content: "🚫 Você não está em serviço!",
+        content: "🚫 Você não está no cargo de serviço!",
         ephemeral: true
       });
     }
 
-    // 🔍 Canal serviço
+    // 🔍 Serviço
     const emServico = await estaEmServico(interaction.guild, interaction.user.id);
 
     if (!emServico) {
       return interaction.reply({
-        content: "🚫 Você precisa registrar serviço no canal!",
+        content: "🚫 Você não registrou serviço no canal!",
         ephemeral: true
       });
     }
