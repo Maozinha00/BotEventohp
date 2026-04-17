@@ -42,7 +42,10 @@ function eventoAtivo() {
 
 // 🤖 BOT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages // ✅ necessário
+  ]
 });
 
 // 📊 DB
@@ -59,6 +62,8 @@ function getUser(id) {
 async function estaEmServico(guild, userId) {
   try {
     const channel = await guild.channels.fetch(CANAL_SERVICO_ID);
+    if (!channel) return false;
+
     const messages = await channel.messages.fetch({ limit: 30 });
 
     return messages.some(msg =>
@@ -67,7 +72,8 @@ async function estaEmServico(guild, userId) {
       JSON.stringify(msg.embeds || []).includes(userId)
     );
 
-  } catch {
+  } catch (err) {
+    console.error("Erro ao verificar serviço:", err);
     return false;
   }
 }
@@ -173,7 +179,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.isChatInputCommand()) {
 
-      if (interaction.commandName === "painel") {
+      if (interaction.commandName === "painelevento") { // ✅ corrigido
         return interaction.reply({
           embeds: [painelEvento(interaction.user)],
           components: [botoes()]
