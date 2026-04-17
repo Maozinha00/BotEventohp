@@ -35,45 +35,25 @@ const PREMIO = {
   3: 30000
 };
 
-// 📅 EVENTO CONFIG
-const DATA_EVENTO = "17/04/2026";
-const HORA_INICIO = "19:00";
-const HORA_FIM = "21:00";
+// 🔥 EVENTO (AGORA MANUAL)
+let eventoAberto = false;
 
-// ⏰ EVENTO (DIA + HORA BRASIL)
+// ✔ EVENTO ATIVO
 function eventoAtivo() {
-  const agora = new Date();
-
-  const brasil = new Date(
-    agora.toLocaleString("en-US", {
-      timeZone: "America/Sao_Paulo"
-    })
-  );
-
-  const dia = brasil.getDate();
-  const mes = brasil.getMonth() + 1;
-  const ano = brasil.getFullYear();
-
-  // 📅 só dia 17/04/2026
-  if (dia !== 17 || mes !== 4 || ano !== 2026) {
-    return false;
-  }
-
-  const inicio = new Date(brasil);
-  inicio.setHours(19, 0, 0, 0);
-
-  const fim = new Date(brasil);
-  fim.setHours(21, 0, 0, 0);
-
-  return brasil >= inicio && brasil <= fim;
+  return eventoAberto;
 }
 
 // 🤖 BOT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
-// 📊 DB
+// 📊 DB (memória)
 const db = { users: {} };
 
 function getUser(id) {
@@ -125,22 +105,19 @@ ${user}
     );
 }
 
-// 📢 ANÚNCIO
+// 📢 INFO EVENTO
 function painelInfo() {
+  const status = eventoAtivo()
+    ? "🟢 EVENTO ABERTO AGORA!"
+    : "🔴 EVENTO FECHADO";
+
   const agora = new Date();
 
   const brasil = new Date(
-    agora.toLocaleString("pt-BR", {
+    new Date().toLocaleString("en-US", {
       timeZone: "America/Sao_Paulo"
     })
   );
-
-  const dataAtual = brasil.toLocaleDateString("pt-BR");
-  const horaAtual = brasil.toLocaleTimeString("pt-BR");
-
-  const status = eventoAtivo()
-    ? "🟢 EVENTO LIBERADO AGORA!"
-    : "🔴 EVENTO FECHADO";
 
   return new EmbedBuilder()
     .setColor("#ff0000")
@@ -148,37 +125,28 @@ function painelInfo() {
     .setDescription(
 `🚨 **ATENÇÃO EQUIPE MÉDICA** 🚨
 
-📅 **Data:** ${DATA_EVENTO}  
-⏰ **Horário:** ${HORA_INICIO} às ${HORA_FIM}  
-
-📍 **Agora:** ${dataAtual} • ${horaAtual}
+📍 Agora: ${brasil.toLocaleString("pt-BR")}
 
 ${status}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 **COMO PARTICIPAR**
-• Realize atendimentos  
-• Atenda chamados  
-• Esteja em serviço  
+🏥 COMO PARTICIPAR
+• Atendimentos  
+• Chamados  
+• Em serviço  
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏆 **PREMIAÇÃO**
-🥇 1º — 100.000$  
-🥈 2º — 60.000$  
-🥉 3º — 30.000$  
+🏆 PREMIAÇÃO
+🥇 100.000$  
+🥈 60.000$  
+🥉 30.000$  
 
 ━━━━━━━━━━━━━━━━━━━
 
-⚠️ **REGRAS**
-• Obrigatório estar em serviço  
-• Proibido farm  
-• Apenas ações reais  
-
-🔥 **Boa sorte!**`
+🔥 Boa sorte!`
     )
-    .setFooter({ text: "Hospital Bella • Evento automático" })
     .setTimestamp();
 }
 
@@ -204,8 +172,21 @@ function botoes() {
 
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
-  new SlashCommandBuilder().setName("infoevento").setDescription("Ver anúncio do evento")
+  new SlashCommandBuilder()
+    .setName("painelevento")
+    .setDescription("Abrir painel"),
+
+  new SlashCommandBuilder()
+    .setName("infoevento")
+    .setDescription("Ver info do evento"),
+
+  new SlashCommandBuilder()
+    .setName("abrirevento")
+    .setDescription("Abrir evento"),
+
+  new SlashCommandBuilder()
+    .setName("fecharevento")
+    .setDescription("Fechar evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -225,7 +206,24 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
+    // 🔹 COMANDOS
     if (interaction.isChatInputCommand()) {
+
+      if (interaction.commandName === "abrirevento") {
+        eventoAberto = true;
+        return interaction.reply({
+          content: "🟢 Evento ABERTO!",
+          ephemeral: true
+        });
+      }
+
+      if (interaction.commandName === "fecharevento") {
+        eventoAberto = false;
+        return interaction.reply({
+          content: "🔴 Evento FECHADO!",
+          ephemeral: true
+        });
+      }
 
       if (interaction.commandName === "painelevento") {
         return interaction.reply({
@@ -241,11 +239,12 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
 
+    // 🔘 BOTÕES
     if (!interaction.isButton()) return;
 
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não está ativo",
+        content: "⛔ Evento fechado",
         ephemeral: true
       });
     }
@@ -263,7 +262,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!emServico) {
       return interaction.reply({
-        content: "🚫 Você não registrou serviço no canal!",
+        content: "🚫 Não está registrado no serviço!",
         ephemeral: true
       });
     }
@@ -273,13 +272,19 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
-      return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
+      return interaction.reply({
+        content: "🏥 Atendimento registrado",
+        ephemeral: true
+      });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
-      return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
+      return interaction.reply({
+        content: "📞 Chamado registrado",
+        ephemeral: true
+      });
     }
 
     if (interaction.customId === "ranking") {
