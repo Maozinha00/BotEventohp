@@ -8,11 +8,7 @@ import {
   ButtonStyle,
   REST,
   Routes,
-  SlashCommandBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  PermissionFlagsBits
+  SlashCommandBuilder
 } from "discord.js";
 
 // 🔐 CONFIG
@@ -25,19 +21,26 @@ if (!TOKEN || !CLIENT_ID) {
 }
 
 // 👮 CARGOS
+const CARGO_ADMIN_ID = "1490431614055088128";
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
-// 📌 CANAL
+// 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
+const CANAL_LOGS_ID = "1495370353193521182";
 
-// 🏥 EVENTO FIXO (BRASIL CORRETO)
-function criarHorarioBR(ano, mes, dia, hora, min) {
-  return Date.UTC(ano, mes - 1, dia, hora + 3, min, 0);
+// 📅 EVENTO FIXO
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
+
+// 🔥 STATUS
+function eventoAtivo() {
+  const agora = new Date();
+  return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
 }
 
-const EVENTO_INICIO = criarHorarioBR(2026, 4, 19, 18, 0);
-const EVENTO_FIM = criarHorarioBR(2026, 4, 19, 21, 0);
+// 👥 PARTICIPANTES
+const participantesAtuais = new Set();
 
 // 📊 DB
 const db = { users: {} };
@@ -49,19 +52,51 @@ function getUser(id) {
   return db.users[id];
 }
 
-// ⏰ EVENTO REAL
-function eventoAberto() {
-  const agora = Date.now();
-  return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
-}
-
+// 🤖 BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-let painelMsgId = null;
+// 📢 EMBED (DESCRIÇÃO ANTIGA MELHORADA)
+function painelInfo() {
+  const status = eventoAtivo() ? "aberto" : "fechado";
 
-// 🔘 BOTÕES
+  return new EmbedBuilder()
+    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setDescription(
+`<@&${CARGO_PING}>
+
+🚨 EVENTO ESPECIAL HOJE
+
+📅 19/04/2026
+⏰ 18:00 ATÉ 21:00
+
+━━━━━━━━━━━━━━━━━━━
+
+📅 HOJE: ${new Date().toLocaleDateString("pt-BR")}
+
+${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+
+👥 PARTICIPANTES: ${participantesAtuais.size}
+
+━━━━━━━━━━━━━━━━━━━
+
+🏥 REGRAS
+• Cargo de serviço obrigatório
+• Estar em serviço
+• Usar botões
+
+━━━━━━━━━━━━━━━━━━━
+
+🏆 PREMIAÇÃO
+🥇 100.000$
+🥈 60.000$
+🥉 30.000$`
+    );
+}
+
+// 🔘 BOTÕES (COM CONTADOR FUNCIONANDO)
 function botoes() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -81,11 +116,19 @@ function botoes() {
   );
 }
 
+// 📊 LOG
+async function logEvento(user, tipo) {
+  try {
+    const canal = await client.channels.fetch(CANAL_LOGS_ID);
+    canal.send(`👤 <@${user}> - ${tipo} às ${new Date().toLocaleTimeString("pt-BR")}`);
+  } catch {}
+}
+
 // 📢 PAINEL
+let painelMsgId = null;
+
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-
-  const status = eventoAberto() ? "aberto" : "fechado";
 
   const ranking = Object.entries(db.users)
     .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -96,34 +139,7 @@ async function atualizarPainel() {
     topText += `\n${i + 1}. <@${id}> — ${d.pontos} pts`;
   });
 
-  const inicio = new Date(EVENTO_INICIO).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  const fim = new Date(EVENTO_FIM).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-
-  const embed = new EmbedBuilder()
-    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-    .setTitle("🏥 HOSPITAL BELLA - EVENTO OFICIAL")
-    .setDescription(
-`━━━━━━━━━━━━━━━━━━━━━━
-
-🏥 **PLANTÃO HOSPITAL BELLA**
-
-📅 Início: ${inicio}
-📅 Fim: ${fim}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-${status === "aberto"
-  ? "🟢 EVENTO ATIVO - ATENDIMENTOS LIBERADOS"
-  : "🔴 EVENTO FECHADO - AGUARDE O HORÁRIO OFICIAL"}
-
-👥 Participantes: ${Object.keys(db.users).length}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🏆 TOP 3${topText}
-
-💡 Sistema automático de pontuação em andamento.`
-    );
+  const embed = painelInfo();
 
   if (painelMsgId) {
     const msg = await canal.messages.fetch(painelMsgId);
@@ -152,21 +168,28 @@ client.on("interactionCreate", async (interaction) => {
     if (!member.roles.cache.has(CARGO_SERVICO_ID))
       return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
 
-    if (!eventoAberto())
-      return interaction.reply({ content: "⛔ Evento ainda não está ativo", ephemeral: true });
+    if (!eventoAtivo())
+      return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
 
+    participantesAtuais.add(interaction.user.id);
+
+    // 🏥 ATENDIMENTO (+1)
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos += 1;
-      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
+      await logEvento(interaction.user.id, "Atendimento");
+      return interaction.reply({ content: `🏥 Atendimento registrado (+1) | Total: ${user.atendimentos}`, ephemeral: true });
     }
 
+    // 📞 CHAMADO (+2)
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos += 2;
-      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
+      await logEvento(interaction.user.id, "Chamado");
+      return interaction.reply({ content: `📞 Chamado registrado (+2) | Total: ${user.chamados}`, ephemeral: true });
     }
 
+    // 🏆 RANKING
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
