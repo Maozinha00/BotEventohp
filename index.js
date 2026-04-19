@@ -12,7 +12,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🔐 ENV
+// 🔐 TOKEN
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
@@ -21,13 +21,13 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 👑 CARGOS
-const CARGO_EVENTO_ID = "1477683902079303932";
-const CARGO_SERVICO_ID = "1492553421973356795";
-const CARGO_ADMIN_ID = "1490431614055088128"; // 👑 ADMIN
+// 👮 CARGOS
+const CARGO_ADMIN_ID = "1490431614055088128"; // STAFF
+const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
 
-// 📌 CANAL SERVIÇO
-const CANAL_SERVICO_ID = "1490431346298851490";
+// ⏰ EVENTO
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
 // 🏆 PREMIAÇÃO
 const PREMIO = {
@@ -36,30 +36,28 @@ const PREMIO = {
   3: 30000
 };
 
-// ⏰ EVENTO AUTOMÁTICO
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
-
-// 🔥 STATUS
-let eventoStatus = "fechado";
-
-function atualizarEventoAutomatico() {
+// 🔥 STATUS DINÂMICO
+function getEventoStatus() {
   const agora = new Date();
 
   if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
-    eventoStatus = "aberto";
-  } else {
-    eventoStatus = "fechado";
+    return "aberto";
   }
+  return "fechado";
 }
 
 function eventoAtivo() {
-  return eventoStatus === "aberto";
+  return getEventoStatus() === "aberto";
 }
 
-// 👮 VERIFICAR ADMIN
+// 👮 PERMISSÃO STAFF
 function isAdmin(member) {
   return member.roles.cache.has(CARGO_ADMIN_ID);
+}
+
+// 👤 PODE PARTICIPAR
+function podeParticipar(member) {
+  return member.roles.cache.has(CARGO_SERVICO_ID);
 }
 
 // 🤖 BOT
@@ -67,7 +65,6 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers
   ]
 });
@@ -82,55 +79,36 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 🔍 SERVIÇO
-async function estaEmServico(guild, userId) {
-  try {
-    const channel = await guild.channels.fetch(CANAL_SERVICO_ID);
-    if (!channel) return false;
-
-    const messages = await channel.messages.fetch({ limit: 30 });
-
-    return messages.some(msg =>
-      msg.content?.includes(userId) ||
-      msg.content?.includes(`<@${userId}>`)
-    );
-  } catch {
-    return false;
-  }
-}
-
-// 📢 PAINEL EVENTO
+// 📢 PAINEL
 function painelInfo() {
-  const statusTexto =
-    eventoStatus === "aberto"
-      ? "🟢 EVENTO ABERTO AGORA!"
-      : "🔴 EVENTO FECHADO";
+  const status = getEventoStatus();
 
   return new EmbedBuilder()
-    .setColor("#ff0000")
+    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 **ATENÇÃO EQUIPE MÉDICA**
+`🚨 **ATENÇÃO EQUIPE**
 
-${statusTexto}
+${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 COMO PARTICIPAR
-• Atendimento  
-• Chamados  
-• Estar em serviço  
+📅 19/04/2026  
+⏰ 18:00 até 21:00
+
+━━━━━━━━━━━━━━━━━━━
+
+🏥 REGRAS
+• Só participa quem tem cargo de serviço  
+• Apenas STAFF controla o evento  
 
 ━━━━━━━━━━━━━━━━━━━
 
 🏆 PREMIAÇÃO
 🥇 100.000$
 🥈 60.000$
-🥉 30.000$
-
-⏰ 18:00 até 21:00`
-    )
-    .setTimestamp();
+🥉 30.000$`
+    );
 }
 
 // 🔘 BOTÕES
@@ -156,9 +134,8 @@ function botoes() {
 // 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
-  new SlashCommandBuilder().setName("infoevento").setDescription("Ver info do evento"),
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento manual"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento manual")
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -172,11 +149,6 @@ client.once("ready", async () => {
   });
 
   console.log("✅ Comandos registrados");
-
-  // ⏰ AUTO EVENTO
-  setInterval(() => {
-    atualizarEventoAutomatico();
-  }, 30000);
 });
 
 // 🎮 INTERAÇÕES
@@ -185,23 +157,28 @@ client.on("interactionCreate", async (interaction) => {
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // 🚫 BLOQUEIO GLOBAL ADMIN (COMANDOS)
+  // 👮 COMANDOS STAFF
   if (interaction.isChatInputCommand()) {
+
     if (!isAdmin(member)) {
       return interaction.reply({
-        content: "🚫 Você não tem permissão para usar este comando.",
+        content: "🚫 Apenas STAFF pode usar isso.",
         ephemeral: true
       });
     }
 
     if (interaction.commandName === "abrirevento") {
-      eventoStatus = "aberto";
-      return interaction.reply({ content: "🟢 Evento aberto manualmente!", ephemeral: true });
+      return interaction.reply({
+        content: "🟢 Evento liberado!",
+        ephemeral: true
+      });
     }
 
     if (interaction.commandName === "fecharevento") {
-      eventoStatus = "fechado";
-      return interaction.reply({ content: "🔴 Evento fechado!", ephemeral: true });
+      return interaction.reply({
+        content: "🔴 Evento fechado!",
+        ephemeral: true
+      });
     }
 
     if (interaction.commandName === "painelevento") {
@@ -210,36 +187,21 @@ client.on("interactionCreate", async (interaction) => {
         components: [botoes()]
       });
     }
-
-    if (interaction.commandName === "infoevento") {
-      return interaction.reply({
-        embeds: [painelInfo()]
-      });
-    }
   }
 
-  // 🔘 BOTÕES
+  // 🔘 BOTÕES (PARTICIPANTES)
   if (interaction.isButton()) {
 
     if (!eventoAtivo()) {
       return interaction.reply({
-        content: "⛔ Evento não está ativo",
+        content: "⛔ Evento fechado",
         ephemeral: true
       });
     }
 
-    if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
+    if (!podeParticipar(member)) {
       return interaction.reply({
-        content: "🚫 Você não está em serviço!",
-        ephemeral: true
-      });
-    }
-
-    const emServico = await estaEmServico(interaction.guild, interaction.user.id);
-
-    if (!emServico) {
-      return interaction.reply({
-        content: "🚫 Você não registrou serviço!",
+        content: "🚫 Você não pode participar.",
         ephemeral: true
       });
     }
