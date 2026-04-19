@@ -24,33 +24,18 @@ if (!TOKEN || !CLIENT_ID) {
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128"; // STAFF
 const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
+const CARGO_EVENTO_MARCAR = "1477683902079303932"; // PING GERAL
 
-// 📅 EVENTO
-const EVENTO_DATA = "19/04/2026";
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
-
-// 🔥 CONTROLE MANUAL
-let eventoManual = null; 
-// null = automático | true = aberto | false = fechado
+// 🔥 EVENTO MANUAL
+let eventoStatus = "fechado"; // aberto | fechado
 
 // ⏰ STATUS
 function getEventoStatus() {
-  const agora = new Date();
-
-  if (eventoManual !== null) {
-    return eventoManual ? "aberto" : "fechado";
-  }
-
-  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
-    return "aberto";
-  }
-
-  return "fechado";
+  return eventoStatus;
 }
 
 function eventoAtivo() {
-  return getEventoStatus() === "aberto";
+  return eventoStatus === "aberto";
 }
 
 // 👮 PERMISSÕES
@@ -85,7 +70,7 @@ function getDataHoje() {
   return new Date().toLocaleDateString("pt-BR");
 }
 
-// 📢 EMBED DO EVENTO
+// 📢 EMBED INFO EVENTO
 function painelInfo() {
   const status = getEventoStatus();
 
@@ -93,20 +78,19 @@ function painelInfo() {
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 **EVENTO ESPECIAL HOJE**
+`🚨 <@&${CARGO_EVENTO_MARCAR}> 🚨
 
-📅 **DIA:** Domingo (${EVENTO_DATA})  
+📅 **HOJE:** ${getDataHoje()}  
+📆 **EVENTO OFICIAL:** 19/04/2026  
 ⏰ **HORÁRIO:** 18:00 ATÉ 21:00  
 
 ━━━━━━━━━━━━━━━━━━━
-
-📅 HOJE: ${getDataHoje()}
 
 ${status === "aberto" ? "🟢 EVENTO ONLINE AGORA!" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 REGRAS DO EVENTO
+🏥 REGRAS
 • Apenas cargo de serviço participa  
 • Estar em serviço obrigatório  
 • Usar botões do evento  
@@ -116,11 +100,7 @@ ${status === "aberto" ? "🟢 EVENTO ONLINE AGORA!" : "🔴 EVENTO FECHADO"}
 🏆 PREMIAÇÃO
 🥇 100.000$  
 🥈 60.000$  
-🥉 30.000$
-
-━━━━━━━━━━━━━━━━━━━
-
-👮 CONTROLADO POR STAFF`
+🥉 30.000$`
     );
 }
 
@@ -185,16 +165,16 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
-      eventoManual = true;
+      eventoStatus = "aberto";
 
       return interaction.reply({
-        content: "🟢 EVENTO ONLINE!",
+        content: "🟢 EVENTO ABERTO!",
         ephemeral: true
       });
     }
 
     if (interaction.commandName === "fecharevento") {
-      eventoManual = false;
+      eventoStatus = "fechado";
 
       return interaction.reply({
         content: "🔴 EVENTO FECHADO!",
@@ -211,6 +191,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.commandName === "infoevento") {
       return interaction.reply({
+        content: `<@&${CARGO_EVENTO_MARCAR}>`,
         embeds: [painelInfo()]
       });
     }
