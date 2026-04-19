@@ -37,46 +37,42 @@ const CARGO_3 = "1495374557404594267";
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 
-// 📅 EVENTO (timestamp seguro)
+// 📅 EVENTO
 let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
 let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
 
 // ⚡ CONTROLE
 let eventoManual = null;
 
-// 👥 PARTICIPANTES
-const participantesAtuais = new Set();
-
 // 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
+    db.users[id] = {
+      atendimentos: 0,
+      chamados: 0,
+      pontos: 0,
+      batido: false
+    };
   }
   return db.users[id];
 }
 
-// 🔥 STATUS DO EVENTO
-function getEventoStatus() {
+// 🔥 STATUS
+function eventoAberto() {
   const agora = Date.now();
 
-  if (eventoManual === true) return "aberto";
-  if (eventoManual === false) return "fechado";
+  if (eventoManual === true) return true;
+  if (eventoManual === false) return false;
 
-  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) return "aberto";
-  return "fechado";
-}
-
-function eventoAberto() {
-  return getEventoStatus() === "aberto";
+  return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
 }
 
 function dataBR(ms) {
   return new Date(ms).toLocaleString("pt-BR");
 }
 
-// 🤖 BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
@@ -86,6 +82,11 @@ let painelMsgId = null;
 // 🔘 BOTÕES
 function botoes() {
   return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("baterponto")
+      .setLabel("📍 Bater Ponto")
+      .setStyle(ButtonStyle.Secondary),
+
     new ButtonBuilder()
       .setCustomId("atendimento")
       .setLabel("🏥 Atendimento")
@@ -99,7 +100,7 @@ function botoes() {
     new ButtonBuilder()
       .setCustomId("ranking")
       .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -107,7 +108,7 @@ function botoes() {
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
-  const status = getEventoStatus();
+  const status = eventoAberto() ? "aberto" : "fechado";
 
   const ranking = Object.entries(db.users)
     .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -124,16 +125,27 @@ async function atualizarPainel() {
     .setDescription(
 `<@&${CARGO_PING}>
 
-📅 INÍCIO: ${dataBR(EVENTO_INICIO)}
-⏰ FIM: ${dataBR(EVENTO_FIM)}
+🚨 EVENTO ESPECIAL HOJE
 
-━━━━━━━━━━━━━━
+📅 19/04/2026
+⏰ 18:00 ATÉ 21:00
+
+━━━━━━━━━━━━━━━━━━━
+
+📅 HOJE: ${new Date().toLocaleDateString("pt-BR")}
 
 ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
-👥 PARTICIPANTES: ${participantesAtuais.size}
+━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━
+📍 PONTO OBRIGATÓRIO PARA PARTICIPAR
+• Você precisa bater ponto antes de usar o sistema
+
+━━━━━━━━━━━━━━━━━━━
+
+👥 PARTICIPANTES: ${Object.values(db.users).filter(u => u.batido).length}
+
+━━━━━━━━━━━━━━━━━━━
 
 🏆 TOP 3:${topText}`
     );
@@ -147,51 +159,40 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
   }
 }
 
-// 🚀 COMANDOS
-const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento"),
-  new SlashCommandBuilder().setName("painelconfig").setDescription("Configurar evento")
-].map(c => c.toJSON());
-
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-client.once("ready", async () => {
-  console.log(`✅ Online: ${client.user.tag}`);
-  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-  setTimeout(atualizarPainel, 3000);
-});
-
-// 🎮 INTERAÇÕES
+// 🚀 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const user = getUser(interaction.user.id);
 
-  // 🔘 BOTÕES
+  // 📍 BATER PONTO
+  if (interaction.isButton() && interaction.customId === "baterponto") {
+    user.batido = true;
+    return interaction.reply({ content: "📍 Ponto batido! Agora você pode participar do evento.", ephemeral: true });
+  }
+
+  // ⛔ BLOQUEIO GERAL
   if (interaction.isButton()) {
 
-    if (interaction.customId === "atendimento") {
-
-      if (!eventoAberto())
+    if (interaction.customId !== "ranking" && interaction.customId !== "baterponto") {
+      if (!eventoAberto()) {
         return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
+      }
 
-      const user = getUser(interaction.user.id);
+      if (!user.batido) {
+        return interaction.reply({ content: "📍 Você precisa bater ponto antes de participar", ephemeral: true });
+      }
+    }
+
+    if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
-
       return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
-
-      if (!eventoAberto())
-        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
-
-      const user = getUser(interaction.user.id);
       user.chamados++;
       user.pontos++;
-
       return interaction.reply({ content: "📞 Registrado", ephemeral: true });
     }
 
@@ -201,32 +202,27 @@ client.on("interactionCreate", async (interaction) => {
         .slice(0, 3);
 
       let text = "🏆 TOP 3\n\n";
-      ranking.forEach(([id, data], i) => {
-        text += `${i + 1}. <@${id}> — ${data.pontos} pts\n`;
+      ranking.forEach(([id, d], i) => {
+        text += `${i + 1}. <@${id}> — ${d.pontos} pts\n`;
       });
 
       return interaction.reply({ content: text || "Sem dados", ephemeral: true });
     }
   }
+});
 
-  // ⚙️ CONFIG
-  if (interaction.isChatInputCommand()) {
+// 👮 COMANDOS
+const commands = [
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
+].map(c => c.toJSON());
 
-    if (!member.permissions.has(PermissionFlagsBits.Administrator))
-      return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-    if (interaction.commandName === "abrirevento") {
-      eventoManual = true;
-      await atualizarPainel();
-      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
-    }
-
-    if (interaction.commandName === "fecharevento") {
-      eventoManual = false;
-      await atualizarPainel();
-      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
-    }
-  }
+client.once("ready", async () => {
+  console.log(`✅ Online: ${client.user.tag}`);
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+  setTimeout(atualizarPainel, 3000);
 });
 
 client.login(TOKEN);
