@@ -24,18 +24,25 @@ if (!TOKEN || !CLIENT_ID) {
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128"; // STAFF
 const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
-const CARGO_EVENTO_MARCAR = "1477683902079303932"; // PING GERAL
+const CARGO_PING = "1477683902079303932"; // PING EVENTO
 
-// 🔥 EVENTO MANUAL
-let eventoStatus = "fechado"; // aberto | fechado
+// 📅 EVENTO
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
-// ⏰ STATUS
+// ⏰ STATUS AUTOMÁTICO
 function getEventoStatus() {
-  return eventoStatus;
+  const agora = new Date();
+
+  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
+    return "aberto";
+  }
+
+  return "fechado";
 }
 
 function eventoAtivo() {
-  return eventoStatus === "aberto";
+  return getEventoStatus() === "aberto";
 }
 
 // 👮 PERMISSÕES
@@ -45,6 +52,11 @@ function isAdmin(member) {
 
 function podeParticipar(member) {
   return member.roles.cache.has(CARGO_SERVICO_ID);
+}
+
+// 📅 DATA HOJE
+function getDataHoje() {
+  return new Date().toLocaleDateString("pt-BR");
 }
 
 // 🤖 BOT
@@ -65,12 +77,7 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📅 DATA HOJE
-function getDataHoje() {
-  return new Date().toLocaleDateString("pt-BR");
-}
-
-// 📢 EMBED INFO EVENTO
+// 📢 EMBED EVENTO
 function painelInfo() {
   const status = getEventoStatus();
 
@@ -78,15 +85,18 @@ function painelInfo() {
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 <@&${CARGO_EVENTO_MARCAR}> 🚨
+`<@&${CARGO_PING}>
 
-📅 **HOJE:** ${getDataHoje()}  
-📆 **EVENTO OFICIAL:** 19/04/2026  
-⏰ **HORÁRIO:** 18:00 ATÉ 21:00  
+🚨 EVENTO ESPECIAL HOJE
+
+📅 DIA: Domingo (19/04/2026)  
+⏰ HORÁRIO: 18:00 ATÉ 21:00  
 
 ━━━━━━━━━━━━━━━━━━━
 
-${status === "aberto" ? "🟢 EVENTO ONLINE AGORA!" : "🔴 EVENTO FECHADO"}
+📅 HOJE: ${getDataHoje()}
+
+${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -100,7 +110,11 @@ ${status === "aberto" ? "🟢 EVENTO ONLINE AGORA!" : "🔴 EVENTO FECHADO"}
 🏆 PREMIAÇÃO
 🥇 100.000$  
 🥈 60.000$  
-🥉 30.000$`
+🥉 30.000$
+
+━━━━━━━━━━━━━━━━━━━
+
+👮 CONTROLADO POR STAFF`
     );
 }
 
@@ -128,8 +142,8 @@ function botoes() {
 const commands = [
   new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
   new SlashCommandBuilder().setName("infoevento").setDescription("Ver evento"),
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento (STAFF)"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento (STAFF)")
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Forçar abrir (STAFF)"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Forçar fechar (STAFF)")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -165,19 +179,19 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
-      eventoStatus = "aberto";
+      EVENTO_INICIO.setTime(Date.now() - 1000); // força abrir
 
       return interaction.reply({
-        content: "🟢 EVENTO ABERTO!",
+        content: "🟢 EVENTO FORÇADO ABERTO!",
         ephemeral: true
       });
     }
 
     if (interaction.commandName === "fecharevento") {
-      eventoStatus = "fechado";
+      EVENTO_FIM.setTime(Date.now() - 1000); // força fechar
 
       return interaction.reply({
-        content: "🔴 EVENTO FECHADO!",
+        content: "🔴 EVENTO FORÇADO FECHADO!",
         ephemeral: true
       });
     }
@@ -191,7 +205,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.commandName === "infoevento") {
       return interaction.reply({
-        content: `<@&${CARGO_EVENTO_MARCAR}>`,
+        content: `<@&${CARGO_PING}>`,
         embeds: [painelInfo()]
       });
     }
