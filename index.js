@@ -35,12 +35,21 @@ const CARGO_3 = "1495374557404594267";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO (ABRE 18:00)
+// 📅 HORÁRIO DO EVENTO
 const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
 const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
+// ⚡ CONTROLE (manual + horário)
+// null = automático | true = aberto | false = fechado
+let eventoManual = null;
+let ultimoStatus = null;
+
 function getEventoStatus() {
   const agora = new Date();
+
+  if (eventoManual === true) return "aberto";
+  if (eventoManual === false) return "fechado";
+
   if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) return "aberto";
   return "fechado";
 }
@@ -70,53 +79,33 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-let eventoFinalizado = false;
+let painelMsgId = null;
 
-async function finalizarEvento() {
-  if (eventoFinalizado) return;
+async function atualizarPainel() {
+  try {
+    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
-  const guild = client.guilds.cache.first();
-  if (!guild) return;
+    const status = getEventoStatus();
 
-  const ranking = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
+    const ranking = Object.entries(db.users)
+      .sort((a, b) => b[1].pontos - a[1].pontos)
+      .slice(0, 3);
 
-  const cargos = [CARGO_1, CARGO_2, CARGO_3];
+    let topText = "";
+    ranking.forEach(([id, data], i) => {
+      topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
+    });
 
-  for (let i = 0; i < ranking.length; i++) {
-    const [userId] = ranking[i];
-    try {
-      const member = await guild.members.fetch(userId);
-      await member.roles.add(cargos[i]);
-    } catch {}
-  }
-
-  eventoFinalizado = true;
-}
-
-function painelInfo() {
-  const status = getEventoStatus();
-
-  const ranking = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
-
-  let topText = "";
-  ranking.forEach(([id, data], i) => {
-    topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
-  });
-
-  return new EmbedBuilder()
-    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-    .setTitle("📢 EVENTO HOSPITAL BELLA")
-    .setDescription(
+    const embed = new EmbedBuilder()
+      .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+      .setTitle("📢 EVENTO HOSPITAL BELLA")
+      .setDescription(
 `<@&${CARGO_PING}>
 
 🚨 EVENTO DO DIA
 
 📅 19/04/2026  
-⏰ ABRE 18:00 / FECHA 21:00
+⏰ 18:00 ATÉ 21:00
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -128,8 +117,8 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 ATENDIMENTOS ATIVOS
-📞 CHAMADOS ATIVOS
+🏥 ATENDIMENTOS
+📞 CHAMADOS
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -140,77 +129,55 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🥇 TOP 3 DO EVENTO:${topText}`
-    );
-}
-
-function botoes() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("atendimento")
-      .setLabel("🏥 Atendimento")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId("chamado")
-      .setLabel("📞 Chamado")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("ranking")
-      .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Secondary)
-  );
-}
-
-async function logEvento(user, tipo) {
-  try {
-    const canal = await client.channels.fetch(CANAL_LOGS_ID);
-    canal.send(`📊 LOG\n\n👤 <@${user}>\n📌 ${tipo}\n⏰ ${new Date().toLocaleTimeString("pt-BR")}`);
-  } catch {}
-}
-
-let painelMsgId = null;
-
-async function atualizarPainel() {
-  try {
-    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-    const embed = painelInfo();
+🥇 TOP 3:${topText}`
+      );
 
     if (painelMsgId) {
-      try {
-        const msg = await canal.messages.fetch(painelMsgId);
-        return msg.edit({ embeds: [embed], components: [botoes()] });
-      } catch {}
+      const msg = await canal.messages.fetch(painelMsgId);
+      await msg.edit({ embeds: [embed] });
+    } else {
+      const msg = await canal.send({ embeds: [embed] });
+      painelMsgId = msg.id;
     }
 
-    const msg = await canal.send({ embeds: [embed], components: [botoes()] });
-    painelMsgId = msg.id;
   } catch {}
 }
 
-// ⏰ AUTO SISTEMA
+// ⏰ AUTO SISTEMA (horário + mudança de status)
 setInterval(async () => {
-  const agora = new Date();
+  const statusAtual = getEventoStatus();
 
-  const h = agora.getHours();
-  const m = agora.getMinutes();
-
-  // abre/fecha painel
-  if (h === 18 || h === 21) {
+  // atualiza painel quando muda status
+  if (statusAtual !== ultimoStatus) {
+    ultimoStatus = statusAtual;
     await atualizarPainel();
-  }
-
-  // finaliza evento 21:00
-  if (h === 21 && m === 0) {
-    await finalizarEvento();
   }
 
 }, 60000);
 
+// 🏆 FINALIZA EVENTO
+async function finalizarEvento() {
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
+
+  const cargos = [CARGO_1, CARGO_2, CARGO_3];
+
+  for (let i = 0; i < ranking.length; i++) {
+    try {
+      const member = await guild.members.fetch(ranking[i][0]);
+      await member.roles.add(cargos[i]);
+    } catch {}
+  }
+}
+
+// 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento manual"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento manual")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -228,61 +195,22 @@ client.on("interactionCreate", async (interaction) => {
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  if (interaction.isButton()) {
+  if (!interaction.isChatInputCommand()) return;
 
-    if (!eventoAtivo()) {
-      return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
-    }
-
-    if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
-      return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
-    }
-
-    const user = getUser(interaction.user.id);
-    participantesAtuais.add(interaction.user.id);
-
-    if (interaction.customId === "atendimento") {
-      user.atendimentos++;
-      user.pontos++;
-      await logEvento(interaction.user.id, "Atendimento");
-      return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
-    }
-
-    if (interaction.customId === "chamado") {
-      user.chamados++;
-      user.pontos++;
-      await logEvento(interaction.user.id, "Chamado");
-      return interaction.reply({ content: "📞 Registrado", ephemeral: true });
-    }
-
-    if (interaction.customId === "ranking") {
-      const ranking = Object.entries(db.users)
-        .sort((a, b) => b[1].pontos - a[1].pontos)
-        .slice(0, 3);
-
-      let text = "🏆 TOP 3\n\n";
-
-      ranking.forEach(([id, data], i) => {
-        text += `${i + 1}. <@${id}> — ${data.pontos} pts\n`;
-      });
-
-      return interaction.reply({ content: text || "Sem dados", ephemeral: true });
-    }
+  if (!member.roles.cache.has(CARGO_ADMIN_ID)) {
+    return interaction.reply({ content: "🚫 STAFF apenas", ephemeral: true });
   }
 
-  if (interaction.isChatInputCommand()) {
+  if (interaction.commandName === "abrirevento") {
+    eventoManual = true;
+    await atualizarPainel();
+    return interaction.reply({ content: "🟢 Evento aberto (manual + horário ativo)", ephemeral: true });
+  }
 
-    if (!member.roles.cache.has(CARGO_ADMIN_ID)) {
-      return interaction.reply({ content: "🚫 STAFF apenas", ephemeral: true });
-    }
-
-    if (interaction.commandName === "abrirevento") {
-      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
-    }
-
-    if (interaction.commandName === "fecharevento") {
-      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
-    }
+  if (interaction.commandName === "fecharevento") {
+    eventoManual = false;
+    await atualizarPainel();
+    return interaction.reply({ content: "🔴 Evento fechado (manual)", ephemeral: true });
   }
 });
 
