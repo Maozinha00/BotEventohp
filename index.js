@@ -12,7 +12,8 @@ import {
   SlashCommandBuilder,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  PermissionFlagsBits
 } from "discord.js";
 
 // 🔐 CONFIG
@@ -26,7 +27,6 @@ if (!TOKEN || !CLIENT_ID) {
 
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128";
-const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
 // 🏆 RECOMPENSAS
@@ -36,36 +36,13 @@ const CARGO_3 = "1495374557404594267";
 
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
-const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO (EDITÁVEL NO PAINEL)
-let EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-let EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
+// 📅 EVENTO (timestamp seguro)
+let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
+let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
 
+// ⚡ CONTROLE
 let eventoManual = null;
-let ultimoStatus = null;
-
-// 🧠 PARSER DE DATA (EVITA INVALID DATE)
-function parseData(input) {
-  // formato esperado: YYYY-MM-DD HH:mm
-  const [data, hora] = input.split(" ");
-  if (!data || !hora) return null;
-  return new Date(`${data}T${hora}:00-03:00`);
-}
-
-function getEventoStatus() {
-  const agora = new Date();
-
-  if (eventoManual === true) return "aberto";
-  if (eventoManual === false) return "fechado";
-
-  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) return "aberto";
-  return "fechado";
-}
-
-function eventoAtivo() {
-  return getEventoStatus() === "aberto";
-}
 
 // 👥 PARTICIPANTES
 const participantesAtuais = new Set();
@@ -80,10 +57,26 @@ function getUser(id) {
   return db.users[id];
 }
 
-function getDataHoje() {
-  return new Date().toLocaleDateString("pt-BR");
+// 🔥 STATUS DO EVENTO
+function getEventoStatus() {
+  const agora = Date.now();
+
+  if (eventoManual === true) return "aberto";
+  if (eventoManual === false) return "fechado";
+
+  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) return "aberto";
+  return "fechado";
 }
 
+function eventoAberto() {
+  return getEventoStatus() === "aberto";
+}
+
+function dataBR(ms) {
+  return new Date(ms).toLocaleString("pt-BR");
+}
+
+// 🤖 BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
@@ -110,79 +103,49 @@ function botoes() {
   );
 }
 
-// 📢 PAINEL PRINCIPAL
+// 📢 PAINEL
 async function atualizarPainel() {
-  try {
-    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
-    const status = getEventoStatus();
+  const status = getEventoStatus();
 
-    const ranking = Object.entries(db.users)
-      .sort((a, b) => b[1].pontos - a[1].pontos)
-      .slice(0, 3);
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
 
-    let topText = "";
-    ranking.forEach(([id, data], i) => {
-      topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
-    });
+  let topText = "";
+  ranking.forEach(([id, data], i) => {
+    topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
+  });
 
-    const embed = new EmbedBuilder()
-      .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-      .setTitle("📢 EVENTO HOSPITAL BELLA")
-      .setDescription(
+  const embed = new EmbedBuilder()
+    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setDescription(
 `<@&${CARGO_PING}>
 
-🚨 EVENTO DO DIA
+📅 INÍCIO: ${dataBR(EVENTO_INICIO)}
+⏰ FIM: ${dataBR(EVENTO_FIM)}
 
-📅 ${EVENTO_INICIO.toLocaleString("pt-BR")}
-⏰ ${EVENTO_FIM.toLocaleString("pt-BR")}
-
-━━━━━━━━━━━━━━━━━━━
-
-📅 HOJE: ${getDataHoje()}
+━━━━━━━━━━━━━━
 
 ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 👥 PARTICIPANTES: ${participantesAtuais.size}
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 
-🏥 ATENDIMENTOS
-📞 CHAMADOS
+🏆 TOP 3:${topText}`
+    );
 
-━━━━━━━━━━━━━━━━━━━
-
-🏆 PREMIAÇÃO
-🥇 100.000$  
-🥈 60.000$  
-🥉 30.000$
-
-━━━━━━━━━━━━━━━━━━━
-
-🥇 TOP 3:${topText}`
-      );
-
-    if (painelMsgId) {
-      const msg = await canal.messages.fetch(painelMsgId);
-      await msg.edit({ embeds: [embed], components: [botoes()] });
-    } else {
-      const msg = await canal.send({ embeds: [embed], components: [botoes()] });
-      painelMsgId = msg.id;
-    }
-
-  } catch {}
-}
-
-// ⏰ AUTO UPDATE
-setInterval(async () => {
-  const statusAtual = getEventoStatus();
-
-  if (statusAtual !== ultimoStatus) {
-    ultimoStatus = statusAtual;
-    await atualizarPainel();
+  if (painelMsgId) {
+    const msg = await canal.messages.fetch(painelMsgId);
+    await msg.edit({ embeds: [embed], components: [botoes()] });
+  } else {
+    const msg = await canal.send({ embeds: [embed], components: [botoes()] });
+    painelMsgId = msg.id;
   }
-
-}, 60000);
+}
 
 // 🚀 COMANDOS
 const commands = [
@@ -195,10 +158,8 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
-
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-
-  setTimeout(() => atualizarPainel(), 3000);
+  setTimeout(atualizarPainel, 3000);
 });
 
 // 🎮 INTERAÇÕES
@@ -207,20 +168,30 @@ client.on("interactionCreate", async (interaction) => {
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // 🟢 BOTÕES
+  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     if (interaction.customId === "atendimento") {
+
+      if (!eventoAberto())
+        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
+
       const user = getUser(interaction.user.id);
       user.atendimentos++;
       user.pontos++;
+
       return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
+
+      if (!eventoAberto())
+        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
+
       const user = getUser(interaction.user.id);
       user.chamados++;
       user.pontos++;
+
       return interaction.reply({ content: "📞 Registrado", ephemeral: true });
     }
 
@@ -236,58 +207,13 @@ client.on("interactionCreate", async (interaction) => {
 
       return interaction.reply({ content: text || "Sem dados", ephemeral: true });
     }
-
-    if (interaction.customId === "config_evento") {
-
-      const modal = new ModalBuilder()
-        .setCustomId("modal_evento")
-        .setTitle("Configurar Evento");
-
-      const inicio = new TextInputBuilder()
-        .setCustomId("inicio")
-        .setLabel("Início (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      const fim = new TextInputBuilder()
-        .setCustomId("fim")
-        .setLabel("Fim (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(inicio),
-        new ActionRowBuilder().addComponents(fim)
-      );
-
-      return interaction.showModal(modal);
-    }
   }
 
-  // 🧠 MODAL
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId === "modal_evento") {
-
-      const ini = parseData(interaction.fields.getTextInputValue("inicio"));
-      const fim = parseData(interaction.fields.getTextInputValue("fim"));
-
-      if (!ini || !fim) {
-        return interaction.reply({ content: "❌ Data inválida", ephemeral: true });
-      }
-
-      EVENTO_INICIO = ini;
-      EVENTO_FIM = fim;
-
-      await atualizarPainel();
-
-      return interaction.reply({ content: "✅ Evento atualizado com sucesso", ephemeral: true });
-    }
-  }
-
-  // 👮 COMANDOS
+  // ⚙️ CONFIG
   if (interaction.isChatInputCommand()) {
 
-    if (!member.permissions.has("Administrator")) {
+    if (!member.permissions.has(PermissionFlagsBits.Administrator))
       return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
-    }
 
     if (interaction.commandName === "abrirevento") {
       eventoManual = true;
@@ -299,21 +225,6 @@ client.on("interactionCreate", async (interaction) => {
       eventoManual = false;
       await atualizarPainel();
       return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
-    }
-
-    if (interaction.commandName === "painelconfig") {
-      const embed = new EmbedBuilder()
-        .setTitle("⚙️ Configuração")
-        .setDescription("Clique para alterar o evento");
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("config_evento")
-          .setLabel("⏰ Alterar Evento")
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
     }
   }
 });
