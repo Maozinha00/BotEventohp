@@ -9,7 +9,10 @@ import {
   ButtonStyle,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } from "discord.js";
 
 // 🔐 CONFIG
@@ -35,12 +38,11 @@ const CARGO_3 = "1495374557404594267";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 HORÁRIO DO EVENTO
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
+// 📅 EVENTO DINÂMICO (EDITÁVEL NO BOT)
+let EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+let EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
-// ⚡ CONTROLE (manual + horário)
-// null = automático | true = aberto | false = fechado
+// ⚡ CONTROLE
 let eventoManual = null;
 let ultimoStatus = null;
 
@@ -81,10 +83,10 @@ const client = new Client({
 
 let painelMsgId = null;
 
+// 📢 PAINEL PRINCIPAL
 async function atualizarPainel() {
   try {
     const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-
     const status = getEventoStatus();
 
     const ranking = Object.entries(db.users)
@@ -104,8 +106,8 @@ async function atualizarPainel() {
 
 🚨 EVENTO DO DIA
 
-📅 19/04/2026  
-⏰ 18:00 ATÉ 21:00
+📅 ${EVENTO_INICIO.toLocaleString("pt-BR")}  
+⏰ ${EVENTO_FIM.toLocaleString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -143,11 +145,27 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
   } catch {}
 }
 
-// ⏰ AUTO SISTEMA (horário + mudança de status)
+// ⚙️ PAINEL CONFIG
+async function painelConfig(interaction) {
+  const embed = new EmbedBuilder()
+    .setColor("#0099ff")
+    .setTitle("⚙️ CONFIGURAR EVENTO")
+    .setDescription("Clique no botão abaixo para alterar data e horário do evento.");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("config_evento")
+      .setLabel("⏰ Alterar Evento")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+// ⏰ AUTO UPDATE
 setInterval(async () => {
   const statusAtual = getEventoStatus();
 
-  // atualiza painel quando muda status
   if (statusAtual !== ultimoStatus) {
     ultimoStatus = statusAtual;
     await atualizarPainel();
@@ -155,38 +173,18 @@ setInterval(async () => {
 
 }, 60000);
 
-// 🏆 FINALIZA EVENTO
-async function finalizarEvento() {
-  const guild = client.guilds.cache.first();
-  if (!guild) return;
-
-  const ranking = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
-
-  const cargos = [CARGO_1, CARGO_2, CARGO_3];
-
-  for (let i = 0; i < ranking.length; i++) {
-    try {
-      const member = await guild.members.fetch(ranking[i][0]);
-      await member.roles.add(cargos[i]);
-    } catch {}
-  }
-}
-
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento manual"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento manual")
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento"),
+  new SlashCommandBuilder().setName("painelconfig").setDescription("Configurar evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
-
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-
   setTimeout(() => atualizarPainel(), 3000);
 });
 
@@ -195,22 +193,74 @@ client.on("interactionCreate", async (interaction) => {
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  if (!interaction.isChatInputCommand()) return;
+  // 📌 PAINEL CONFIG
+  if (interaction.isChatInputCommand()) {
 
-  if (!member.roles.cache.has(CARGO_ADMIN_ID)) {
-    return interaction.reply({ content: "🚫 STAFF apenas", ephemeral: true });
+    if (!member.permissions.has("Administrator")) {
+      return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
+    }
+
+    if (interaction.commandName === "painelconfig") {
+      return painelConfig(interaction);
+    }
+
+    if (interaction.commandName === "abrirevento") {
+      eventoManual = true;
+      await atualizarPainel();
+      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
+    }
+
+    if (interaction.commandName === "fecharevento") {
+      eventoManual = false;
+      await atualizarPainel();
+      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
+    }
   }
 
-  if (interaction.commandName === "abrirevento") {
-    eventoManual = true;
-    await atualizarPainel();
-    return interaction.reply({ content: "🟢 Evento aberto (manual + horário ativo)", ephemeral: true });
+  // 🔘 BOTÃO CONFIG
+  if (interaction.isButton()) {
+    if (interaction.customId === "config_evento") {
+
+      const modal = new ModalBuilder()
+        .setCustomId("modal_evento")
+        .setTitle("Configurar Evento");
+
+      const inputInicio = new TextInputBuilder()
+        .setCustomId("inicio")
+        .setLabel("Data/Hora Início (ex: 2026-04-19 18:00)")
+        .setStyle(TextInputStyle.Short);
+
+      const inputFim = new TextInputBuilder()
+        .setCustomId("fim")
+        .setLabel("Data/Hora Fim (ex: 2026-04-19 21:00)")
+        .setStyle(TextInputStyle.Short);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(inputInicio),
+        new ActionRowBuilder().addComponents(inputFim)
+      );
+
+      return interaction.showModal(modal);
+    }
   }
 
-  if (interaction.commandName === "fecharevento") {
-    eventoManual = false;
-    await atualizarPainel();
-    return interaction.reply({ content: "🔴 Evento fechado (manual)", ephemeral: true });
+  // 🧠 MODAL SUBMIT
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === "modal_evento") {
+
+      const inicio = interaction.fields.getTextInputValue("inicio");
+      const fim = interaction.fields.getTextInputValue("fim");
+
+      EVENTO_INICIO = new Date(inicio.replace(" ", "T") + ":00-03:00");
+      EVENTO_FIM = new Date(fim.replace(" ", "T") + ":00-03:00");
+
+      await atualizarPainel();
+
+      return interaction.reply({
+        content: "✅ Evento atualizado com sucesso!",
+        ephemeral: true
+      });
+    }
   }
 });
 
