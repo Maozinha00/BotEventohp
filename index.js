@@ -23,25 +23,13 @@ if (!TOKEN || !CLIENT_ID) {
 
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128"; // STAFF
-const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
+const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPANTES
 
-// ⏰ EVENTO
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
-
-// 🔥 STATUS AUTOMÁTICO
-function getEventoStatus() {
-  const agora = new Date();
-
-  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
-    return "aberto";
-  }
-
-  return "fechado";
-}
+// 🔥 EVENTO MANUAL
+let eventoStatus = "fechado"; // aberto | fechado
 
 function eventoAtivo() {
-  return getEventoStatus() === "aberto";
+  return eventoStatus === "aberto";
 }
 
 // 👮 PERMISSÕES
@@ -61,7 +49,7 @@ const client = new Client({
   ]
 });
 
-// 📊 DB simples
+// 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
@@ -71,22 +59,20 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📢 EMBED EVENTO (CORRIGIDO)
+// 📢 EMBED DO EVENTO (COM DATA/HORA)
 function painelInfo() {
-  const status = getEventoStatus();
-
   return new EmbedBuilder()
-    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+    .setColor(eventoStatus === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
 `🚨 ATENÇÃO EQUIPE
 
-${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+${eventoStatus === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-📅 19/04/2026  
-⏰ 18:00 até 21:00
+📅 DATA: 19/04/2026  
+⏰ HORÁRIO: 18:00 até 21:00
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -147,10 +133,7 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
-  const member = await interaction.guild.members.fetch({
-    user: interaction.user.id,
-    force: true
-  });
+  const member = await interaction.guild.members.fetch(interaction.user.id);
 
   // 👮 COMANDOS STAFF
   if (interaction.isChatInputCommand()) {
@@ -163,15 +146,19 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
+      eventoStatus = "aberto";
+
       return interaction.reply({
-        content: "🟢 Evento aberto!",
+        content: "🟢 Evento ABERTO com sucesso!",
         ephemeral: true
       });
     }
 
     if (interaction.commandName === "fecharevento") {
+      eventoStatus = "fechado";
+
       return interaction.reply({
-        content: "🔴 Evento fechado!",
+        content: "🔴 Evento FECHADO com sucesso!",
         ephemeral: true
       });
     }
@@ -184,7 +171,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // 🔘 BOTÕES (PARTICIPANTES)
+  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     if (!eventoAtivo()) {
