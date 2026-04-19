@@ -10,12 +10,6 @@ import {
 
 // 🔐 CONFIG
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-
-if (!TOKEN || !CLIENT_ID) {
-  console.error("❌ TOKEN ou CLIENT_ID não configurados");
-  process.exit(1);
-}
 
 // 👮 CARGOS
 const CARGO_SERVICO_ID = "1492553421973356795";
@@ -25,9 +19,9 @@ const CARGO_PING = "1477683902079303932";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 HORÁRIO NOVO (09:03 → 09:10)
-const EVENTO_INICIO = new Date("2026-04-19T09:03:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T09:10:00-03:00");
+// ⏰ EVENTO (09:10 → 09:15)
+const EVENTO_INICIO = new Date("2026-04-19T09:10:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T09:15:00-03:00");
 
 // 📊 DB
 const db = { users: {} };
@@ -39,10 +33,24 @@ function getUser(id) {
   return db.users[id];
 }
 
-// ⏰ EVENTO
+// ⏰ STATUS
 function eventoAtivo() {
   const agora = Date.now();
   return agora >= EVENTO_INICIO.getTime() && agora <= EVENTO_FIM.getTime();
+}
+
+// 🚫 COOLDOWN 5s
+const cooldown = new Map();
+const COOLDOWN_TIME = 5000;
+
+function podeClicar(id) {
+  const agora = Date.now();
+  const ultimo = cooldown.get(id);
+
+  if (ultimo && agora - ultimo < COOLDOWN_TIME) return false;
+
+  cooldown.set(id, agora);
+  return true;
 }
 
 // 🤖 BOT
@@ -51,61 +59,80 @@ const client = new Client({
 });
 
 let painelMsgId = null;
-let ultimoStatus = null;
+let finalizado = false;
 
 // 🔘 BOTÕES
 function botoes() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("atendimento")
-      .setLabel("🏥 Atendimento")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId("chamado")
-      .setLabel("📞 Chamado")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("ranking")
-      .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
   );
+}
+
+// 📊 LOGS BONITOS
+async function logEvento(userId, tipo, pontos) {
+  try {
+    const canal = await client.channels.fetch(CANAL_LOGS_ID);
+
+    const embed = new EmbedBuilder()
+      .setColor("#2f3136")
+      .setTitle("📊 LOG HOSPITAL BELLA")
+      .setDescription(
+`👤 Usuário: <@${userId}>
+📌 Ação: ${tipo}
+⭐ Pontos: +${pontos}
+⏰ ${new Date().toLocaleTimeString("pt-BR")}`
+      );
+
+    canal.send({ embeds: [embed] });
+  } catch {}
+}
+
+// 🏆 RANKING BONITO
+function gerarRanking() {
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
+
+  let text = "";
+
+  ranking.forEach(([id, d], i) => {
+    const medalha = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+    text += `${medalha} **${i + 1}º Lugar**\n👤 <@${id}>\n⭐ ${d.pontos} pts\n\n`;
+  });
+
+  return new EmbedBuilder()
+    .setColor("#ffd700")
+    .setTitle("🏆 RANKING HOSPITAL BELLA")
+    .setDescription(text || "Sem dados ainda");
 }
 
 // 📢 PAINEL
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
-  const status = eventoAtivo() ? "aberto" : "fechado";
-
   const embed = new EmbedBuilder()
-    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+    .setColor(eventoAtivo() ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
 `<@&${CARGO_PING}>
 
-🚨 EVENTO ESPECIAL
+🏥 EVENTO OFICIAL
 
 📅 DATA: 19/04/2026
+⏰ INÍCIO: 09:10
+⏰ FIM: 09:15
 
-⏰ INÍCIO: 09:03
-⏰ FIM: 09:10
+━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━
-
-${status === "aberto"
-? "🟢 EVENTO ABERTO - ATIVO AGORA"
-: "🔴 EVENTO FECHADO - AGUARDE PRÓXIMO"}
+${eventoAtivo() ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
 
 👥 PARTICIPANTES: ${Object.keys(db.users).length}
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━
 
-🏆 PREMIAÇÃO
-🥇 100.000$
-🥈 60.000$
-🥉 30.000$`
+🏆 Sistema de ranking ativo`
     );
 
   if (painelMsgId) {
@@ -117,17 +144,52 @@ ${status === "aberto"
   }
 }
 
-// 🔥 ATUALIZAÇÃO AUTOMÁTICA EXATA (SEM ATRASO)
+// 🏁 FINAL + TOP 3 CARGOS
+async function finalizar() {
+  if (finalizado) return;
+  finalizado = true;
+
+  const guild = client.guilds.cache.first();
+
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
+
+  for (let i = 0; i < ranking.length; i++) {
+    const [id] = ranking[i];
+    const member = await guild.members.fetch(id).catch(() => null);
+
+    if (member) {
+      const cargo =
+        i === 0
+          ? "1477683902100410424"
+          : i === 1
+          ? "1495374426815074304"
+          : "1495374557404594267";
+
+      await member.roles.add(cargo);
+    }
+  }
+
+  console.log("🏆 TOP 3 FINAL ENTREGUE");
+}
+
+// 🔥 LOOP INTELIGENTE (SEM BUG DE HORÁRIO)
+let ultimoStatus = null;
+
 setInterval(async () => {
+  const agora = Date.now();
   const status = eventoAtivo() ? "aberto" : "fechado";
 
-  // só atualiza quando muda o status
   if (status !== ultimoStatus) {
     ultimoStatus = status;
     await atualizarPainel();
   }
 
-}, 1000);
+  if (agora > EVENTO_FIM.getTime()) {
+    await finalizar();
+  }
+}, 5000);
 
 // 🚀 READY
 client.once("ready", async () => {
@@ -140,7 +202,6 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
-
   const user = getUser(interaction.user.id);
 
   if (interaction.isButton()) {
@@ -151,29 +212,28 @@ client.on("interactionCreate", async (interaction) => {
     if (!eventoAtivo())
       return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
 
+    if (!podeClicar(interaction.user.id))
+      return interaction.reply({ content: "⏳ Aguarde 5 segundos!", ephemeral: true });
+
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos += 1;
+      await logEvento(interaction.user.id, "ATENDIMENTO", 1);
       return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos += 2;
+      await logEvento(interaction.user.id, "CHAMADO", 2);
       return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
-      const ranking = Object.entries(db.users)
-        .sort((a, b) => b[1].pontos - a[1].pontos)
-        .slice(0, 3);
-
-      let text = "🏆 TOP 3\n\n";
-      ranking.forEach(([id, d], i) => {
-        text += `${i + 1}. <@${id}> — ${d.pontos} pts\n`;
+      return interaction.reply({
+        embeds: [gerarRanking()],
+        ephemeral: true
       });
-
-      return interaction.reply({ content: text || "Sem dados", ephemeral: true });
     }
   }
 });
