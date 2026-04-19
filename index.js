@@ -27,6 +27,7 @@ if (!TOKEN || !CLIENT_ID) {
 
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128";
+const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
 // 🏆 RECOMPENSAS
@@ -37,11 +38,10 @@ const CARGO_3 = "1495374557404594267";
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 
-// 📅 EVENTO
+// 📅 EVENTO (BRASIL -03:00)
 let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
 let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
 
-// ⚡ CONTROLE
 let eventoManual = null;
 
 // 📊 DB
@@ -49,17 +49,11 @@ const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = {
-      atendimentos: 0,
-      chamados: 0,
-      pontos: 0,
-      batido: false
-    };
+    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
   }
   return db.users[id];
 }
 
-// 🔥 STATUS
 function eventoAberto() {
   const agora = Date.now();
 
@@ -67,10 +61,6 @@ function eventoAberto() {
   if (eventoManual === false) return false;
 
   return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
-}
-
-function dataBR(ms) {
-  return new Date(ms).toLocaleString("pt-BR");
 }
 
 const client = new Client({
@@ -82,11 +72,6 @@ let painelMsgId = null;
 // 🔘 BOTÕES
 function botoes() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("baterponto")
-      .setLabel("📍 Bater Ponto")
-      .setStyle(ButtonStyle.Secondary),
-
     new ButtonBuilder()
       .setCustomId("atendimento")
       .setLabel("🏥 Atendimento")
@@ -125,25 +110,16 @@ async function atualizarPainel() {
     .setDescription(
 `<@&${CARGO_PING}>
 
-🚨 EVENTO ESPECIAL HOJE
+🚨 EVENTO ESPECIAL
 
-📅 19/04/2026
-⏰ 18:00 ATÉ 21:00
+📅 INÍCIO: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
+⏰ FIM: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━
-
-📅 HOJE: ${new Date().toLocaleDateString("pt-BR")}
 
 ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
-━━━━━━━━━━━━━━━━━━━
-
-📍 PONTO OBRIGATÓRIO PARA PARTICIPAR
-• Você precisa bater ponto antes de usar o sistema
-
-━━━━━━━━━━━━━━━━━━━
-
-👥 PARTICIPANTES: ${Object.values(db.users).filter(u => u.batido).length}
+👥 PARTICIPANTES: ${Object.keys(db.users).length}
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -159,30 +135,46 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
   }
 }
 
-// 🚀 INTERAÇÕES
+// 🚀 SLASH COMMANDS
+const commands = [
+  new SlashCommandBuilder()
+    .setName("abrirevento")
+    .setDescription("Abrir evento"),
+
+  new SlashCommandBuilder()
+    .setName("fecharevento")
+    .setDescription("Fechar evento"),
+
+  new SlashCommandBuilder()
+    .setName("painelconfig")
+    .setDescription("Configurar data e hora do evento")
+].map(c => c.toJSON());
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+client.once("ready", async () => {
+  console.log(`✅ Online: ${client.user.tag}`);
+
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+
+  setTimeout(atualizarPainel, 3000);
+});
+
+// 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
+  const member = await interaction.guild.members.fetch(interaction.user.id);
   const user = getUser(interaction.user.id);
 
-  // 📍 BATER PONTO
-  if (interaction.isButton() && interaction.customId === "baterponto") {
-    user.batido = true;
-    return interaction.reply({ content: "📍 Ponto batido! Agora você pode participar do evento.", ephemeral: true });
-  }
-
-  // ⛔ BLOQUEIO GERAL
+  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
-    if (interaction.customId !== "ranking" && interaction.customId !== "baterponto") {
-      if (!eventoAberto()) {
-        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
-      }
+    if (!member.roles.cache.has(CARGO_SERVICO_ID))
+      return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
 
-      if (!user.batido) {
-        return interaction.reply({ content: "📍 Você precisa bater ponto antes de participar", ephemeral: true });
-      }
-    }
+    if (!eventoAberto())
+      return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
 
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
@@ -209,20 +201,69 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: text || "Sem dados", ephemeral: true });
     }
   }
-});
 
-// 👮 COMANDOS
-const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
-].map(c => c.toJSON());
+  // ⚙️ CONFIGURAÇÃO DO EVENTO
+  if (interaction.isChatInputCommand()) {
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+    if (!member.permissions.has(PermissionFlagsBits.Administrator))
+      return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
 
-client.once("ready", async () => {
-  console.log(`✅ Online: ${client.user.tag}`);
-  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-  setTimeout(atualizarPainel, 3000);
+    if (interaction.commandName === "painelconfig") {
+
+      const modal = new ModalBuilder()
+        .setCustomId("config_evento")
+        .setTitle("Configurar Evento");
+
+      const inicio = new TextInputBuilder()
+        .setCustomId("inicio")
+        .setLabel("Início (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      const fim = new TextInputBuilder()
+        .setCustomId("fim")
+        .setLabel("Fim (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(inicio),
+        new ActionRowBuilder().addComponents(fim)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.commandName === "abrirevento") {
+      eventoManual = true;
+      await atualizarPainel();
+      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
+    }
+
+    if (interaction.commandName === "fecharevento") {
+      eventoManual = false;
+      await atualizarPainel();
+      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
+    }
+  }
+
+  // 🧠 MODAL
+  if (interaction.isModalSubmit()) {
+
+    if (interaction.customId === "config_evento") {
+
+      const ini = Date.parse(interaction.fields.getTextInputValue("inicio") + ":00-03:00");
+      const fim = Date.parse(interaction.fields.getTextInputValue("fim") + ":00-03:00");
+
+      if (!ini || !fim)
+        return interaction.reply({ content: "❌ Data inválida", ephemeral: true });
+
+      EVENTO_INICIO = ini;
+      EVENTO_FIM = fim;
+
+      await atualizarPainel();
+
+      return interaction.reply({ content: "✅ Evento atualizado com sucesso", ephemeral: true });
+    }
+  }
 });
 
 client.login(TOKEN);
