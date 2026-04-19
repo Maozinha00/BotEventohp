@@ -26,8 +26,9 @@ const CARGO_ADMIN_ID = "1490431614055088128";
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
-// 📌 CANAL DO PAINEL (COLOQUE O ID DO CANAL AQUI)
-const CANAL_PAINEL_ID = "COLOQUE_O_ID_DO_CANAL_AQUI";
+// 📌 CANAIS
+const CANAL_PAINEL_ID = "1477683908026961940";
+const CANAL_LOGS_ID = "1495370353193521182";
 
 // 📅 EVENTO
 const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
@@ -44,21 +45,13 @@ function eventoAtivo() {
   return getEventoStatus() === "aberto";
 }
 
-// 👮 PERMISSÕES
-function isAdmin(member) {
-  return member.roles.cache.has(CARGO_ADMIN_ID);
-}
+// 👥 PARTICIPANTES
+const participantesAtuais = new Set();
 
-function podeParticipar(member) {
-  return member.roles.cache.has(CARGO_SERVICO_ID);
-}
+// 🔔 AVISO
+let avisoEnviado = false;
 
-// 🤖 BOT
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
-});
-
-// 📊 DB SIMPLES
+// 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
@@ -68,12 +61,17 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📅 DATA HOJE
+// 📅 DATA
 function getDataHoje() {
   return new Date().toLocaleDateString("pt-BR");
 }
 
-// 📢 EMBED EVENTO
+// 🤖 BOT
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+});
+
+// 📢 EMBED
 function painelInfo() {
   const status = getEventoStatus();
 
@@ -85,8 +83,8 @@ function painelInfo() {
 
 🚨 EVENTO ESPECIAL HOJE
 
-📅 DIA: Domingo (19/04/2026)  
-⏰ HORÁRIO: 18:00 ATÉ 21:00  
+📅 19/04/2026  
+⏰ 18:00 ATÉ 21:00  
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -94,23 +92,21 @@ function painelInfo() {
 
 ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
+👥 PARTICIPANTES: ${participantesAtuais.size}
+
 ━━━━━━━━━━━━━━━━━━━
 
 🏥 REGRAS
-• Apenas cargo de serviço participa  
-• Estar em serviço obrigatório  
-• Usar botões do evento  
+• Cargo de serviço obrigatório  
+• Estar em serviço  
+• Usar botões  
 
 ━━━━━━━━━━━━━━━━━━━
 
 🏆 PREMIAÇÃO
 🥇 100.000$  
 🥈 60.000$  
-🥉 30.000$
-
-━━━━━━━━━━━━━━━━━━━
-
-👮 CONTROLADO POR STAFF`
+🥉 30.000$`
     );
 }
 
@@ -134,7 +130,22 @@ function botoes() {
   );
 }
 
-// 📢 PAINEL AUTOMÁTICO
+// 📊 LOGS
+async function logEvento(user, tipo) {
+  try {
+    const canal = await client.channels.fetch(CANAL_LOGS_ID);
+
+    canal.send(
+`📊 LOG EVENTO
+
+👤 <@${user}>
+📌 ${tipo}
+⏰ ${new Date().toLocaleTimeString("pt-BR")}`
+    );
+  } catch {}
+}
+
+// 📢 PAINEL AUTO
 let painelMsgId = null;
 
 async function atualizarPainel() {
@@ -147,37 +158,37 @@ async function atualizarPainel() {
     if (painelMsgId) {
       try {
         const msg = await canal.messages.fetch(painelMsgId);
-        await msg.edit({ embeds: [embed] });
-        return;
+        return msg.edit({ embeds: [embed] });
       } catch {}
     }
 
     const msg = await canal.send({ embeds: [embed] });
     painelMsgId = msg.id;
-  } catch (err) {
-    console.error("Erro painel:", err);
-  }
+  } catch {}
 }
 
-// ⏰ AUTO 18H / 21H
+// ⏰ AUTO SISTEMA
 setInterval(async () => {
   const agora = new Date();
   const h = agora.getHours();
   const m = agora.getMinutes();
 
-  if (h === 18 && m === 0) {
+  // 🔔 aviso 10 min antes
+  const diff = EVENTO_INICIO - agora;
+  if (diff <= 10 * 60 * 1000 && diff > 9 * 60 * 1000 && !avisoEnviado) {
+    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+    canal.send("⏰ @everyone EVENTO COMEÇA EM 10 MINUTOS!");
+    avisoEnviado = true;
+  }
+
+  if (h === 18 || h === 21) {
     await atualizarPainel();
   }
 
-  if (h === 21 && m === 0) {
-    await atualizarPainel();
-  }
 }, 60000);
 
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
-  new SlashCommandBuilder().setName("infoevento").setDescription("Ver evento"),
   new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento (STAFF)"),
   new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento (STAFF)")
 ].map(c => c.toJSON());
@@ -204,65 +215,37 @@ client.on("interactionCreate", async (interaction) => {
     force: true
   });
 
-  // 👮 STAFF
-  if (interaction.isChatInputCommand()) {
-
-    if (!isAdmin(member)) {
-      return interaction.reply({ content: "🚫 Apenas STAFF.", ephemeral: true });
-    }
-
-    if (interaction.commandName === "abrirevento") {
-      EVENTO_INICIO.setTime(Date.now() - 1000);
-      await atualizarPainel();
-
-      return interaction.reply({ content: "🟢 Evento aberto!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "fecharevento") {
-      EVENTO_FIM.setTime(Date.now() - 1000);
-      await atualizarPainel();
-
-      return interaction.reply({ content: "🔴 Evento fechado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "painelevento") {
-      return interaction.reply({
-        embeds: [painelInfo()],
-        components: [botoes()]
-      });
-    }
-
-    if (interaction.commandName === "infoevento") {
-      return interaction.reply({
-        content: `<@&${CARGO_PING}>`,
-        embeds: [painelInfo()]
-      });
-    }
-  }
-
-  // 🔘 BOTÕES
+  // 🔘 BOTÃO PAINEL
   if (interaction.isButton()) {
+
+    if (interaction.customId === "abrir_painel_evento") {
+      return interaction.reply({ embeds: [painelInfo()], ephemeral: true });
+    }
 
     if (!eventoAtivo()) {
       return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
     }
 
-    if (!podeParticipar(member)) {
-      return interaction.reply({ content: "🚫 Sem cargo de serviço.", ephemeral: true });
+    if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
+      return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
     }
 
     const user = getUser(interaction.user.id);
 
+    participantesAtuais.add(interaction.user.id);
+
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos++;
-      return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
+      await logEvento(interaction.user.id, "Atendimento");
+      return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos++;
-      return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
+      await logEvento(interaction.user.id, "Chamado");
+      return interaction.reply({ content: "📞 Registrado", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -277,6 +260,26 @@ client.on("interactionCreate", async (interaction) => {
       });
 
       return interaction.reply({ content: text || "Sem dados", ephemeral: true });
+    }
+  }
+
+  // 👮 STAFF
+  if (interaction.isChatInputCommand()) {
+
+    if (!member.roles.cache.has(CARGO_ADMIN_ID)) {
+      return interaction.reply({ content: "🚫 STAFF apenas", ephemeral: true });
+    }
+
+    if (interaction.commandName === "abrirevento") {
+      EVENTO_INICIO.setTime(Date.now() - 1000);
+      await atualizarPainel();
+      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
+    }
+
+    if (interaction.commandName === "fecharevento") {
+      EVENTO_FIM.setTime(Date.now() - 1000);
+      await atualizarPainel();
+      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
     }
   }
 });
