@@ -15,13 +15,18 @@ const TOKEN = process.env.TOKEN;
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
+// 🏆 CARGOS TOP 3
+const CARGO_1 = "1477683902100410424";
+const CARGO_2 = "1495374426815074304";
+const CARGO_3 = "1495374557404594267";
+
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// ⏰ EVENTO (09:10 → 09:15)
-const EVENTO_INICIO = new Date("2026-04-19T09:10:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T09:15:00-03:00");
+// ⏰ EVENTO (18:00 → 20:00)
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T20:00:00-03:00");
 
 // 📊 DB
 const db = { users: {} };
@@ -70,7 +75,7 @@ function botoes() {
   );
 }
 
-// 📊 LOGS BONITOS
+// 📊 LOG NORMAL
 async function logEvento(userId, tipo, pontos) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS_ID);
@@ -89,7 +94,40 @@ async function logEvento(userId, tipo, pontos) {
   } catch {}
 }
 
-// 🏆 RANKING BONITO
+// 🏆 LOG FINAL TOP 3
+async function logTop3Final() {
+  try {
+    const canal = await client.channels.fetch(CANAL_LOGS_ID);
+
+    const ranking = Object.entries(db.users)
+      .sort((a, b) => b[1].pontos - a[1].pontos)
+      .slice(0, 3);
+
+    let text = "";
+
+    ranking.forEach(([id, d], i) => {
+      const medalha = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+      text += `${medalha} <@${id}> — ${d.pontos} pts\n`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("#ffd700")
+      .setTitle("🏆 TOP 3 FINAL DO EVENTO")
+      .setDescription(
+`📢 EVENTO ENCERRADO
+
+${text || "Sem dados"}
+
+━━━━━━━━━━━━━━━
+🏥 Hospital Bella`
+      );
+
+    canal.send({ embeds: [embed] });
+
+  } catch {}
+}
+
+// 🏆 RANKING
 function gerarRanking() {
   const ranking = Object.entries(db.users)
     .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -120,9 +158,8 @@ async function atualizarPainel() {
 
 🏥 EVENTO OFICIAL
 
-📅 DATA: 19/04/2026
-⏰ INÍCIO: 09:10
-⏰ FIM: 09:15
+📅 19/04/2026
+⏰ 18:00 → 20:00
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -144,8 +181,8 @@ ${eventoAtivo() ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
   }
 }
 
-// 🏁 FINAL + TOP 3 CARGOS
-async function finalizar() {
+// 🏁 FINAL DO EVENTO
+async function finalizarEvento() {
   if (finalizado) return;
   finalizado = true;
 
@@ -160,21 +197,17 @@ async function finalizar() {
     const member = await guild.members.fetch(id).catch(() => null);
 
     if (member) {
-      const cargo =
-        i === 0
-          ? "1477683902100410424"
-          : i === 1
-          ? "1495374426815074304"
-          : "1495374557404594267";
-
+      const cargo = i === 0 ? CARGO_1 : i === 1 ? CARGO_2 : CARGO_3;
       await member.roles.add(cargo);
     }
   }
 
-  console.log("🏆 TOP 3 FINAL ENTREGUE");
+  await logTop3Final();
+
+  console.log("🏆 Evento finalizado com sucesso");
 }
 
-// 🔥 LOOP INTELIGENTE (SEM BUG DE HORÁRIO)
+// 🔥 LOOP AUTOMÁTICO
 let ultimoStatus = null;
 
 setInterval(async () => {
@@ -187,7 +220,7 @@ setInterval(async () => {
   }
 
   if (agora > EVENTO_FIM.getTime()) {
-    await finalizar();
+    await finalizarEvento();
   }
 }, 5000);
 
