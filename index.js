@@ -23,13 +23,34 @@ if (!TOKEN || !CLIENT_ID) {
 
 // 👮 CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128"; // STAFF
-const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPANTES
+const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
 
-// 🔥 EVENTO MANUAL
-let eventoStatus = "fechado"; // aberto | fechado
+// 📅 EVENTO
+const EVENTO_DATA = "19/04/2026";
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
+
+// 🔥 CONTROLE MANUAL
+let eventoManual = null; 
+// null = automático | true = aberto | false = fechado
+
+// ⏰ STATUS
+function getEventoStatus() {
+  const agora = new Date();
+
+  if (eventoManual !== null) {
+    return eventoManual ? "aberto" : "fechado";
+  }
+
+  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
+    return "aberto";
+  }
+
+  return "fechado";
+}
 
 function eventoAtivo() {
-  return eventoStatus === "aberto";
+  return getEventoStatus() === "aberto";
 }
 
 // 👮 PERMISSÕES
@@ -49,7 +70,7 @@ const client = new Client({
   ]
 });
 
-// 📊 DB
+// 📊 DB SIMPLES
 const db = { users: {} };
 
 function getUser(id) {
@@ -59,33 +80,47 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📢 EMBED DO EVENTO (COM DATA/HORA)
+// 📅 DATA HOJE
+function getDataHoje() {
+  return new Date().toLocaleDateString("pt-BR");
+}
+
+// 📢 EMBED DO EVENTO
 function painelInfo() {
+  const status = getEventoStatus();
+
   return new EmbedBuilder()
-    .setColor(eventoStatus === "aberto" ? "#00ff00" : "#ff0000")
+    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 ATENÇÃO EQUIPE
+`🚨 **EVENTO ESPECIAL HOJE**
 
-${eventoStatus === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
-
-━━━━━━━━━━━━━━━━━━━
-
-📅 DATA: 19/04/2026  
-⏰ HORÁRIO: 18:00 até 21:00
+📅 **DIA:** Domingo (${EVENTO_DATA})  
+⏰ **HORÁRIO:** 18:00 ATÉ 21:00  
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 REGRAS
-• Só participa quem tem cargo de serviço  
-• Apenas STAFF controla o evento  
+📅 HOJE: ${getDataHoje()}
+
+${status === "aberto" ? "🟢 EVENTO ONLINE AGORA!" : "🔴 EVENTO FECHADO"}
+
+━━━━━━━━━━━━━━━━━━━
+
+🏥 REGRAS DO EVENTO
+• Apenas cargo de serviço participa  
+• Estar em serviço obrigatório  
+• Usar botões do evento  
 
 ━━━━━━━━━━━━━━━━━━━
 
 🏆 PREMIAÇÃO
-🥇 100.000$
-🥈 60.000$
-🥉 30.000$`
+🥇 100.000$  
+🥈 60.000$  
+🥉 30.000$
+
+━━━━━━━━━━━━━━━━━━━
+
+👮 CONTROLADO POR STAFF`
     );
 }
 
@@ -112,8 +147,9 @@ function botoes() {
 // 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder().setName("painelevento").setDescription("Abrir painel"),
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
+  new SlashCommandBuilder().setName("infoevento").setDescription("Ver evento"),
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento (STAFF)"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento (STAFF)")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -133,7 +169,10 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const member = await interaction.guild.members.fetch({
+    user: interaction.user.id,
+    force: true
+  });
 
   // 👮 COMANDOS STAFF
   if (interaction.isChatInputCommand()) {
@@ -146,19 +185,19 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
-      eventoStatus = "aberto";
+      eventoManual = true;
 
       return interaction.reply({
-        content: "🟢 Evento ABERTO com sucesso!",
+        content: "🟢 EVENTO ONLINE!",
         ephemeral: true
       });
     }
 
     if (interaction.commandName === "fecharevento") {
-      eventoStatus = "fechado";
+      eventoManual = false;
 
       return interaction.reply({
-        content: "🔴 Evento FECHADO com sucesso!",
+        content: "🔴 EVENTO FECHADO!",
         ephemeral: true
       });
     }
@@ -167,6 +206,12 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({
         embeds: [painelInfo()],
         components: [botoes()]
+      });
+    }
+
+    if (interaction.commandName === "infoevento") {
+      return interaction.reply({
+        embeds: [painelInfo()]
       });
     }
   }
