@@ -41,7 +41,6 @@ const CANAL_PAINEL_ID = "1477683908026961940";
 // 📅 EVENTO
 let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
 let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
-
 let eventoManual = null;
 
 // 📊 DB
@@ -72,13 +71,15 @@ function botoes() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("config_evento").setLabel("⚙️ Configurar Evento").setStyle(ButtonStyle.Secondary)
   );
 }
 
 // 📢 PAINEL
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+
   const status = eventoAberto() ? "aberto" : "fechado";
 
   const ranking = Object.entries(db.users)
@@ -92,34 +93,12 @@ async function atualizarPainel() {
 
   const embed = new EmbedBuilder()
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-    .setTitle("📢 EVENTO HOSPITAL BELLA - SISTEMA OFICIAL")
+    .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 **SISTEMA DE EVENTO AUTOMATIZADO - HOSPITAL BELLA RP**
+`🚨 **EVENTO AUTOMATIZADO**
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-📅 **DATA DO EVENTO**
-• Início: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
-• Fim: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-📌 **INFORMAÇÕES GERAIS**
-• Apenas membros com cargo de serviço podem participar
-• Sistema de pontuação ativo em tempo real
-• Ranking atualizado automaticamente
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ **REGRAS OBRIGATÓRIAS**
-• Proibido uso de multi-contas
-• Respeitar staff
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 **OBJETIVO DO EVENTO**
-• Atendimento hospitalar (+1 ponto)
-• Chamados de emergência (+2 pontos)
+📅 Início: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
+⏰ Fim: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -129,7 +108,7 @@ ${status === "aberto" ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🏆 **TOP 3**${topText}`
+🏆 TOP 3${topText}`
     );
 
   if (painelMsgId) {
@@ -145,7 +124,7 @@ ${status === "aberto" ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
 const commands = [
   new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
   new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento"),
-  new SlashCommandBuilder().setName("painelhora").setDescription("Configurar data e hora do evento")
+  new SlashCommandBuilder().setName("painelhora").setDescription("Configurar data e hora")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -166,6 +145,29 @@ client.on("interactionCreate", async (interaction) => {
   // 🔘 BOTÕES
   if (interaction.isButton()) {
 
+    if (interaction.customId === "config_evento") {
+      const modal = new ModalBuilder()
+        .setCustomId("modal_evento")
+        .setTitle("Configurar Evento");
+
+      const inicio = new TextInputBuilder()
+        .setCustomId("inicio")
+        .setLabel("Início (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      const fim = new TextInputBuilder()
+        .setCustomId("fim")
+        .setLabel("Fim (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(inicio),
+        new ActionRowBuilder().addComponents(fim)
+      );
+
+      return interaction.showModal(modal);
+    }
+
     if (!member.roles.cache.has(CARGO_SERVICO_ID))
       return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
 
@@ -175,13 +177,13 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
       user.pontos += 1;
-      return interaction.reply({ content: "🏥 Atendimento registrado (+1)", ephemeral: true });
+      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
       user.pontos += 2;
-      return interaction.reply({ content: "📞 Chamado registrado (+2)", ephemeral: true });
+      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -198,43 +200,10 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // ⚙️ PAINEL HORA
-  if (interaction.isChatInputCommand()) {
-
-    if (interaction.commandName === "painelhora") {
-
-      const embed = new EmbedBuilder()
-        .setTitle("⚙️ CONFIGURAR EVENTO")
-        .setDescription("Use o formato:\nYYYY-MM-DD HH:mm\nEx: 2026-04-19 18:00")
-        .setColor("#00aaff");
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("config_evento")
-          .setLabel("🕒 Alterar Data/Hora")
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-    }
-
-    if (interaction.commandName === "abrirevento") {
-      eventoManual = true;
-      await atualizarPainel();
-      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
-    }
-
-    if (interaction.commandName === "fecharevento") {
-      eventoManual = false;
-      await atualizarPainel();
-      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
-    }
-  }
-
   // 🧠 MODAL
   if (interaction.isModalSubmit()) {
 
-    if (interaction.customId === "config_evento") {
+    if (interaction.customId === "modal_evento") {
 
       const ini = Date.parse(interaction.fields.getTextInputValue("inicio") + ":00-03:00");
       const fim = Date.parse(interaction.fields.getTextInputValue("fim") + ":00-03:00");
@@ -247,7 +216,7 @@ client.on("interactionCreate", async (interaction) => {
 
       await atualizarPainel();
 
-      return interaction.reply({ content: "✅ Evento atualizado com sucesso", ephemeral: true });
+      return interaction.reply({ content: "✅ Evento atualizado", ephemeral: true });
     }
   }
 });
