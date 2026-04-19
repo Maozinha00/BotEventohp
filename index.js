@@ -26,7 +26,6 @@ if (!TOKEN || !CLIENT_ID) {
 }
 
 // 👮 CARGOS
-const CARGO_ADMIN_ID = "1490431614055088128";
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
@@ -38,10 +37,9 @@ const CARGO_3 = "1495374557404594267";
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 
-// 📅 EVENTO
-let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
-let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
-let eventoManual = null;
+// 📅 EVENTO FIXO (NÃO ABRE ANTES E NÃO FECHA ANTES)
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00").getTime();
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00").getTime();
 
 // 📊 DB
 const db = { users: {} };
@@ -53,20 +51,10 @@ function getUser(id) {
   return db.users[id];
 }
 
+// ⏰ EVENTO SOMENTE POR HORÁRIO (SEM TRAVA MANUAL)
 function eventoAberto() {
   const agora = Date.now();
-  if (eventoManual === true) return true;
-  if (eventoManual === false) return false;
   return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
-}
-
-// ⏰ FORMATADOR CORRETO
-function formatarDataHora(ts) {
-  const d = new Date(ts);
-  return {
-    hora: d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-    data: d.toLocaleDateString("pt-BR")
-  };
 }
 
 const client = new Client({
@@ -80,14 +68,14 @@ function botoes() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId("config_evento").setLabel("⚙️ Configurar Evento").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
   );
 }
 
 // 📢 PAINEL
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+
   const status = eventoAberto() ? "aberto" : "fechado";
 
   const ranking = Object.entries(db.users)
@@ -99,42 +87,33 @@ async function atualizarPainel() {
     topText += `\n${i + 1}. <@${id}> — ${d.pontos} pts`;
   });
 
-  const ini = formatarDataHora(EVENTO_INICIO);
-  const fim = formatarDataHora(EVENTO_FIM);
+  const ini = new Date(EVENTO_INICIO);
+  const fim = new Date(EVENTO_FIM);
 
   const embed = new EmbedBuilder()
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setTitle("🏥 HOSPITAL BELLA - EVENTO OFICIAL")
     .setDescription(
-`🏥 **HOSPITAL BELLA - EVENTO OFICIAL**
+`━━━━━━━━━━━━━━━━━━━━━━
+
+🏥 **PLANTÃO HOSPITAL BELLA**
+
+📅 Início: ${ini.toLocaleString("pt-BR")}
+📅 Fim: ${fim.toLocaleString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🚨 Sistema de atendimento hospitalar ativo em modo de evento especial.
+${status === "aberto" 
+  ? "🟢 EVENTO ATIVO - ATENDIMENTOS LIBERADOS" 
+  : "🔴 EVENTO FECHADO - AGUARDE O HORÁRIO OFICIAL"}
 
-📅 Início: ${ini.hora}  |  ${ini.data}
-⏰ Fim: ${fim.hora}  |  ${fim.data}
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🟢 Status: ${status.toUpperCase()}
-
-👥 Profissionais em serviço participando do plantão especial.
+👥 Participantes: ${Object.keys(db.users).length}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🎯 **OBJETIVO DO EVENTO**
-• Atendimento de emergência
-• Registro de chamados médicos
-• Trabalho em equipe hospitalar
+🏆 TOP 3${topText}
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-🏆 **RANKING DE DESTAQUE**${topText}
-
-💡 Quanto mais atendimentos e chamados, maior sua pontuação no evento!
-
-━━━━━━━━━━━━━━━━━━━━━━`
+💡 Sistema automático de pontuação em andamento.`
     );
 
   if (painelMsgId) {
@@ -148,9 +127,7 @@ async function atualizarPainel() {
 
 // 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento"),
-  new SlashCommandBuilder().setName("painelhora").setDescription("Configurar data e hora do evento")
+  new SlashCommandBuilder().setName("ranking").setDescription("Ver ranking")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -158,7 +135,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-  setTimeout(atualizarPainel, 3000);
+  setInterval(atualizarPainel, 30000);
 });
 
 // 🎮 INTERAÇÕES
@@ -170,28 +147,22 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isButton()) {
 
+    if (!member.roles.cache.has(CARGO_SERVICO_ID))
+      return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
+
+    if (!eventoAberto())
+      return interaction.reply({ content: "⛔ Evento ainda não está ativo ou já foi encerrado", ephemeral: true });
+
     if (interaction.customId === "atendimento") {
-      if (!member.roles.cache.has(CARGO_SERVICO_ID))
-        return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
-
-      if (!eventoAberto())
-        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
-
       user.atendimentos++;
       user.pontos += 1;
-      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
+      return interaction.reply({ content: "🏥 +1 ponto registrado", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
-      if (!member.roles.cache.has(CARGO_SERVICO_ID))
-        return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
-
-      if (!eventoAberto())
-        return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
-
       user.chamados++;
       user.pontos += 2;
-      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
+      return interaction.reply({ content: "📞 +2 pontos registrado", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -205,48 +176,6 @@ client.on("interactionCreate", async (interaction) => {
       });
 
       return interaction.reply({ content: text || "Sem dados", ephemeral: true });
-    }
-
-    if (interaction.customId === "config_evento") {
-      const modal = new ModalBuilder()
-        .setCustomId("modal_evento")
-        .setTitle("Configurar Evento");
-
-      const inicio = new TextInputBuilder()
-        .setCustomId("inicio")
-        .setLabel("Início (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      const fim = new TextInputBuilder()
-        .setCustomId("fim")
-        .setLabel("Fim (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(inicio),
-        new ActionRowBuilder().addComponents(fim)
-      );
-
-      return interaction.showModal(modal);
-    }
-  }
-
-  if (interaction.isModalSubmit()) {
-
-    if (interaction.customId === "modal_evento") {
-
-      const ini = Date.parse(interaction.fields.getTextInputValue("inicio") + ":00-03:00");
-      const fim = Date.parse(interaction.fields.getTextInputValue("fim") + ":00-03:00");
-
-      if (!ini || !fim)
-        return interaction.reply({ content: "❌ Data inválida", ephemeral: true });
-
-      EVENTO_INICIO = ini;
-      EVENTO_FIM = fim;
-
-      await atualizarPainel();
-
-      return interaction.reply({ content: "✅ Evento atualizado", ephemeral: true });
     }
   }
 });
