@@ -38,13 +38,20 @@ const CARGO_3 = "1495374557404594267";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO DINÂMICO (EDITÁVEL NO BOT)
+// 📅 EVENTO (EDITÁVEL NO PAINEL)
 let EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
 let EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
-// ⚡ CONTROLE
 let eventoManual = null;
 let ultimoStatus = null;
+
+// 🧠 PARSER DE DATA (EVITA INVALID DATE)
+function parseData(input) {
+  // formato esperado: YYYY-MM-DD HH:mm
+  const [data, hora] = input.split(" ");
+  if (!data || !hora) return null;
+  return new Date(`${data}T${hora}:00-03:00`);
+}
 
 function getEventoStatus() {
   const agora = new Date();
@@ -83,10 +90,31 @@ const client = new Client({
 
 let painelMsgId = null;
 
+// 🔘 BOTÕES
+function botoes() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("atendimento")
+      .setLabel("🏥 Atendimento")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("chamado")
+      .setLabel("📞 Chamado")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("ranking")
+      .setLabel("🏆 Ranking")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
 // 📢 PAINEL PRINCIPAL
 async function atualizarPainel() {
   try {
     const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+
     const status = getEventoStatus();
 
     const ranking = Object.entries(db.users)
@@ -106,7 +134,7 @@ async function atualizarPainel() {
 
 🚨 EVENTO DO DIA
 
-📅 ${EVENTO_INICIO.toLocaleString("pt-BR")}  
+📅 ${EVENTO_INICIO.toLocaleString("pt-BR")}
 ⏰ ${EVENTO_FIM.toLocaleString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━
@@ -136,30 +164,13 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
     if (painelMsgId) {
       const msg = await canal.messages.fetch(painelMsgId);
-      await msg.edit({ embeds: [embed] });
+      await msg.edit({ embeds: [embed], components: [botoes()] });
     } else {
-      const msg = await canal.send({ embeds: [embed] });
+      const msg = await canal.send({ embeds: [embed], components: [botoes()] });
       painelMsgId = msg.id;
     }
 
   } catch {}
-}
-
-// ⚙️ PAINEL CONFIG
-async function painelConfig(interaction) {
-  const embed = new EmbedBuilder()
-    .setColor("#0099ff")
-    .setTitle("⚙️ CONFIGURAR EVENTO")
-    .setDescription("Clique no botão abaixo para alterar data e horário do evento.");
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("config_evento")
-      .setLabel("⏰ Alterar Evento")
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
 }
 
 // ⏰ AUTO UPDATE
@@ -184,24 +195,98 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
+
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+
   setTimeout(() => atualizarPainel(), 3000);
 });
 
+// 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
 
-  // 📌 PAINEL CONFIG
+  // 🟢 BOTÕES
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "atendimento") {
+      const user = getUser(interaction.user.id);
+      user.atendimentos++;
+      user.pontos++;
+      return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
+    }
+
+    if (interaction.customId === "chamado") {
+      const user = getUser(interaction.user.id);
+      user.chamados++;
+      user.pontos++;
+      return interaction.reply({ content: "📞 Registrado", ephemeral: true });
+    }
+
+    if (interaction.customId === "ranking") {
+      const ranking = Object.entries(db.users)
+        .sort((a, b) => b[1].pontos - a[1].pontos)
+        .slice(0, 3);
+
+      let text = "🏆 TOP 3\n\n";
+      ranking.forEach(([id, data], i) => {
+        text += `${i + 1}. <@${id}> — ${data.pontos} pts\n`;
+      });
+
+      return interaction.reply({ content: text || "Sem dados", ephemeral: true });
+    }
+
+    if (interaction.customId === "config_evento") {
+
+      const modal = new ModalBuilder()
+        .setCustomId("modal_evento")
+        .setTitle("Configurar Evento");
+
+      const inicio = new TextInputBuilder()
+        .setCustomId("inicio")
+        .setLabel("Início (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      const fim = new TextInputBuilder()
+        .setCustomId("fim")
+        .setLabel("Fim (YYYY-MM-DD HH:mm)")
+        .setStyle(TextInputStyle.Short);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(inicio),
+        new ActionRowBuilder().addComponents(fim)
+      );
+
+      return interaction.showModal(modal);
+    }
+  }
+
+  // 🧠 MODAL
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === "modal_evento") {
+
+      const ini = parseData(interaction.fields.getTextInputValue("inicio"));
+      const fim = parseData(interaction.fields.getTextInputValue("fim"));
+
+      if (!ini || !fim) {
+        return interaction.reply({ content: "❌ Data inválida", ephemeral: true });
+      }
+
+      EVENTO_INICIO = ini;
+      EVENTO_FIM = fim;
+
+      await atualizarPainel();
+
+      return interaction.reply({ content: "✅ Evento atualizado com sucesso", ephemeral: true });
+    }
+  }
+
+  // 👮 COMANDOS
   if (interaction.isChatInputCommand()) {
 
     if (!member.permissions.has("Administrator")) {
       return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
-    }
-
-    if (interaction.commandName === "painelconfig") {
-      return painelConfig(interaction);
     }
 
     if (interaction.commandName === "abrirevento") {
@@ -215,51 +300,20 @@ client.on("interactionCreate", async (interaction) => {
       await atualizarPainel();
       return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
     }
-  }
 
-  // 🔘 BOTÃO CONFIG
-  if (interaction.isButton()) {
-    if (interaction.customId === "config_evento") {
+    if (interaction.commandName === "painelconfig") {
+      const embed = new EmbedBuilder()
+        .setTitle("⚙️ Configuração")
+        .setDescription("Clique para alterar o evento");
 
-      const modal = new ModalBuilder()
-        .setCustomId("modal_evento")
-        .setTitle("Configurar Evento");
-
-      const inputInicio = new TextInputBuilder()
-        .setCustomId("inicio")
-        .setLabel("Data/Hora Início (ex: 2026-04-19 18:00)")
-        .setStyle(TextInputStyle.Short);
-
-      const inputFim = new TextInputBuilder()
-        .setCustomId("fim")
-        .setLabel("Data/Hora Fim (ex: 2026-04-19 21:00)")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(inputInicio),
-        new ActionRowBuilder().addComponents(inputFim)
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("config_evento")
+          .setLabel("⏰ Alterar Evento")
+          .setStyle(ButtonStyle.Primary)
       );
 
-      return interaction.showModal(modal);
-    }
-  }
-
-  // 🧠 MODAL SUBMIT
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId === "modal_evento") {
-
-      const inicio = interaction.fields.getTextInputValue("inicio");
-      const fim = interaction.fields.getTextInputValue("fim");
-
-      EVENTO_INICIO = new Date(inicio.replace(" ", "T") + ":00-03:00");
-      EVENTO_FIM = new Date(fim.replace(" ", "T") + ":00-03:00");
-
-      await atualizarPainel();
-
-      return interaction.reply({
-        content: "✅ Evento atualizado com sucesso!",
-        ephemeral: true
-      });
+      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
     }
   }
 });
