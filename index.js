@@ -97,12 +97,15 @@ async function atualizarPainel() {
     .setDescription(
 `🚨 **EVENTO AUTOMATIZADO**
 
-📅 Início: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
+⏰ Início: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
+📅 Data: ${new Date(EVENTO_INICIO).toLocaleDateString("pt-BR")}
+
 ⏰ Fim: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
+📅 Data: ${new Date(EVENTO_FIM).toLocaleDateString("pt-BR")}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-${status === "aberto" ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
+🟢 Status: ${eventoAberto() ? "ABERTO" : "FECHADO"}
 
 👥 Participantes: ${Object.keys(db.users).length}
 
