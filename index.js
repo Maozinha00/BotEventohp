@@ -26,12 +26,17 @@ const CARGO_ADMIN_ID = "1490431614055088128";
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
+// 🏆 RECOMPENSAS
+const CARGO_1 = "1477683902100410424";
+const CARGO_2 = "1495374426815074304";
+const CARGO_3 = "1495374557404594267";
+
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO (LIBERA 07:40)
-const EVENTO_INICIO = new Date("2026-04-19T07:40:00-03:00");
+// 📅 EVENTO (ABRE 18:00)
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
 const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
 function getEventoStatus() {
@@ -46,14 +51,13 @@ function eventoAtivo() {
 
 // 👥 PARTICIPANTES
 const participantesAtuais = new Set();
-let avisoEnviado = false;
 
 // 📊 DB
 const db = { users: {} };
 
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = { atendimentos: 0, chamados: 0, hacking: 0, pontos: 0 };
+    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
   }
   return db.users[id];
 }
@@ -66,8 +70,42 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
+let eventoFinalizado = false;
+
+async function finalizarEvento() {
+  if (eventoFinalizado) return;
+
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
+
+  const cargos = [CARGO_1, CARGO_2, CARGO_3];
+
+  for (let i = 0; i < ranking.length; i++) {
+    const [userId] = ranking[i];
+    try {
+      const member = await guild.members.fetch(userId);
+      await member.roles.add(cargos[i]);
+    } catch {}
+  }
+
+  eventoFinalizado = true;
+}
+
 function painelInfo() {
   const status = getEventoStatus();
+
+  const ranking = Object.entries(db.users)
+    .sort((a, b) => b[1].pontos - a[1].pontos)
+    .slice(0, 3);
+
+  let topText = "";
+  ranking.forEach(([id, data], i) => {
+    topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
+  });
 
   return new EmbedBuilder()
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
@@ -78,7 +116,7 @@ function painelInfo() {
 🚨 EVENTO DO DIA
 
 📅 19/04/2026  
-⏰ ABRE 07:40 / FECHA 21:00
+⏰ ABRE 18:00 / FECHA 21:00
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -90,16 +128,19 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 ━━━━━━━━━━━━━━━━━━━
 
-🏥 ATENDIMENTOS: botão ativo
-📞 CHAMADOS: botão ativo
-💻 HACKING: botão ativo
+🏥 ATENDIMENTOS ATIVOS
+📞 CHAMADOS ATIVOS
 
 ━━━━━━━━━━━━━━━━━━━
 
 🏆 PREMIAÇÃO
 🥇 100.000$  
 🥈 60.000$  
-🥉 30.000$`
+🥉 30.000$
+
+━━━━━━━━━━━━━━━━━━━
+
+🥇 TOP 3 DO EVENTO:${topText}`
     );
 }
 
@@ -114,11 +155,6 @@ function botoes() {
       .setCustomId("chamado")
       .setLabel("📞 Chamado")
       .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("hacking")
-      .setLabel("💻 Hacking")
-      .setStyle(ButtonStyle.Danger),
 
     new ButtonBuilder()
       .setCustomId("ranking")
@@ -153,19 +189,25 @@ async function atualizarPainel() {
   } catch {}
 }
 
-// ⏰ AUTO UPDATE
+// ⏰ AUTO SISTEMA
 setInterval(async () => {
   const agora = new Date();
-  const h = agora.getHours();
 
-  // atualizar painel automaticamente
-  if (h === 7 || h === 21) {
+  const h = agora.getHours();
+  const m = agora.getMinutes();
+
+  // abre/fecha painel
+  if (h === 18 || h === 21) {
     await atualizarPainel();
+  }
+
+  // finaliza evento 21:00
+  if (h === 21 && m === 0) {
+    await finalizarEvento();
   }
 
 }, 60000);
 
-// 🚀 COMANDOS
 const commands = [
   new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
   new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
@@ -213,13 +255,6 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "📞 Registrado", ephemeral: true });
     }
 
-    if (interaction.customId === "hacking") {
-      user.hacking++;
-      user.pontos += 2;
-      await logEvento(interaction.user.id, "Hacking");
-      return interaction.reply({ content: "💻 Registrado", ephemeral: true });
-    }
-
     if (interaction.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -242,7 +277,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
-      return interaction.reply({ content: "🟢 Evento liberado 07:40 ativo", ephemeral: true });
+      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
     }
 
     if (interaction.commandName === "fecharevento") {
