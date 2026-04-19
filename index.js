@@ -12,7 +12,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🔐 TOKEN
+// 🔐 CONFIG
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
@@ -29,20 +29,14 @@ const CARGO_SERVICO_ID = "1492553421973356795"; // PARTICIPAÇÃO
 const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
 const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
-// 🏆 PREMIAÇÃO
-const PREMIO = {
-  1: 100000,
-  2: 60000,
-  3: 30000
-};
-
-// 🔥 STATUS DINÂMICO
+// 🔥 STATUS AUTOMÁTICO
 function getEventoStatus() {
   const agora = new Date();
 
   if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) {
     return "aberto";
   }
+
   return "fechado";
 }
 
@@ -50,12 +44,11 @@ function eventoAtivo() {
   return getEventoStatus() === "aberto";
 }
 
-// 👮 PERMISSÃO STAFF
+// 👮 PERMISSÕES
 function isAdmin(member) {
   return member.roles.cache.has(CARGO_ADMIN_ID);
 }
 
-// 👤 PODE PARTICIPAR
 function podeParticipar(member) {
   return member.roles.cache.has(CARGO_SERVICO_ID);
 }
@@ -64,12 +57,11 @@ function podeParticipar(member) {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers
   ]
 });
 
-// 📊 DB SIMPLES
+// 📊 DB simples
 const db = { users: {} };
 
 function getUser(id) {
@@ -79,7 +71,7 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📢 PAINEL
+// 📢 EMBED EVENTO (CORRIGIDO)
 function painelInfo() {
   const status = getEventoStatus();
 
@@ -87,7 +79,7 @@ function painelInfo() {
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
-`🚨 **ATENÇÃO EQUIPE**
+`🚨 ATENÇÃO EQUIPE
 
 ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
@@ -155,7 +147,10 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.guild) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const member = await interaction.guild.members.fetch({
+    user: interaction.user.id,
+    force: true
+  });
 
   // 👮 COMANDOS STAFF
   if (interaction.isChatInputCommand()) {
@@ -169,7 +164,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.commandName === "abrirevento") {
       return interaction.reply({
-        content: "🟢 Evento liberado!",
+        content: "🟢 Evento aberto!",
         ephemeral: true
       });
     }
@@ -201,7 +196,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!podeParticipar(member)) {
       return interaction.reply({
-        content: "🚫 Você não pode participar.",
+        content: "🚫 Você não tem o cargo para participar.",
         ephemeral: true
       });
     }
@@ -228,7 +223,7 @@ client.on("interactionCreate", async (interaction) => {
       let text = "🏆 TOP 3\n\n";
 
       ranking.forEach(([id, data], i) => {
-        text += `${i + 1}. <@${id}> — ${data.pontos} pts 💰 ${PREMIO[i + 1]}$\n`;
+        text += `${i + 1}. <@${id}> — ${data.pontos} pts\n`;
       });
 
       return interaction.reply({
