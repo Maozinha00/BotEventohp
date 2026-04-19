@@ -24,6 +24,7 @@ if (!TOKEN || !CLIENT_ID) {
 // 👑 CARGOS
 const CARGO_EVENTO_ID = "1477683902079303932";
 const CARGO_SERVICO_ID = "1492553421973356795";
+const CARGO_ADMIN_ID = "1490431614055088128"; // 👑 ADMIN
 
 // 📌 CANAL SERVIÇO
 const CANAL_SERVICO_ID = "1490431346298851490";
@@ -56,6 +57,11 @@ function eventoAtivo() {
   return eventoStatus === "aberto";
 }
 
+// 👮 VERIFICAR ADMIN
+function isAdmin(member) {
+  return member.roles.cache.has(CARGO_ADMIN_ID);
+}
+
 // 🤖 BOT
 const client = new Client({
   intents: [
@@ -66,7 +72,7 @@ const client = new Client({
   ]
 });
 
-// 📊 DB simples
+// 📊 DB SIMPLES
 const db = { users: {} };
 
 function getUser(id) {
@@ -122,7 +128,7 @@ ${statusTexto}
 🥈 60.000$
 🥉 30.000$
 
-⏰ Evento: 18:00 até 21:00`
+⏰ 18:00 até 21:00`
     )
     .setTimestamp();
 }
@@ -167,18 +173,26 @@ client.once("ready", async () => {
 
   console.log("✅ Comandos registrados");
 
-  // 🔁 AUTO EVENTO
+  // ⏰ AUTO EVENTO
   setInterval(() => {
     atualizarEventoAutomatico();
-  }, 30 * 1000);
+  }, 30000);
 });
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+  if (!interaction.guild) return;
 
-  // 🔹 COMANDOS
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+
+  // 🚫 BLOQUEIO GLOBAL ADMIN (COMANDOS)
   if (interaction.isChatInputCommand()) {
+    if (!isAdmin(member)) {
+      return interaction.reply({
+        content: "🚫 Você não tem permissão para usar este comando.",
+        ephemeral: true
+      });
+    }
 
     if (interaction.commandName === "abrirevento") {
       eventoStatus = "aberto";
@@ -205,62 +219,61 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // 🔘 BOTÕES
-  if (!interaction.isButton()) return;
+  if (interaction.isButton()) {
 
-  if (!eventoAtivo()) {
-    return interaction.reply({
-      content: "⛔ Evento não está ativo",
-      ephemeral: true
-    });
-  }
+    if (!eventoAtivo()) {
+      return interaction.reply({
+        content: "⛔ Evento não está ativo",
+        ephemeral: true
+      });
+    }
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
+    if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
+      return interaction.reply({
+        content: "🚫 Você não está em serviço!",
+        ephemeral: true
+      });
+    }
 
-  if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
-    return interaction.reply({
-      content: "🚫 Você não está em serviço!",
-      ephemeral: true
-    });
-  }
+    const emServico = await estaEmServico(interaction.guild, interaction.user.id);
 
-  const emServico = await estaEmServico(interaction.guild, interaction.user.id);
+    if (!emServico) {
+      return interaction.reply({
+        content: "🚫 Você não registrou serviço!",
+        ephemeral: true
+      });
+    }
 
-  if (!emServico) {
-    return interaction.reply({
-      content: "🚫 Você não registrou serviço!",
-      ephemeral: true
-    });
-  }
+    const user = getUser(interaction.user.id);
 
-  const user = getUser(interaction.user.id);
+    if (interaction.customId === "atendimento") {
+      user.atendimentos++;
+      user.pontos++;
+      return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
+    }
 
-  if (interaction.customId === "atendimento") {
-    user.atendimentos++;
-    user.pontos++;
-    return interaction.reply({ content: "🏥 Atendimento registrado", ephemeral: true });
-  }
+    if (interaction.customId === "chamado") {
+      user.chamados++;
+      user.pontos++;
+      return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
+    }
 
-  if (interaction.customId === "chamado") {
-    user.chamados++;
-    user.pontos++;
-    return interaction.reply({ content: "📞 Chamado registrado", ephemeral: true });
-  }
+    if (interaction.customId === "ranking") {
+      const ranking = Object.entries(db.users)
+        .sort((a, b) => b[1].pontos - a[1].pontos)
+        .slice(0, 3);
 
-  if (interaction.customId === "ranking") {
-    const ranking = Object.entries(db.users)
-      .sort((a, b) => b[1].pontos - a[1].pontos)
-      .slice(0, 3);
+      let text = "🏆 TOP 3\n\n";
 
-    let text = "🏆 TOP 3\n\n";
+      ranking.forEach(([id, data], i) => {
+        text += `${i + 1}. <@${id}> — ${data.pontos} pts 💰 ${PREMIO[i + 1]}$\n`;
+      });
 
-    ranking.forEach(([id, data], i) => {
-      text += `${i + 1}. <@${id}> — ${data.pontos} pts 💰 ${PREMIO[i + 1]}$\n`;
-    });
-
-    return interaction.reply({
-      content: text || "Sem dados ainda",
-      ephemeral: true
-    });
+      return interaction.reply({
+        content: text || "Sem dados ainda",
+        ephemeral: true
+      });
+    }
   }
 });
 
