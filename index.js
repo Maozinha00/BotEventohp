@@ -89,7 +89,7 @@ function botoes() {
   );
 }
 
-// 📊 LOGS
+// 📊 LOG
 async function logEvento(userId, tipo, pontos) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS_ID);
@@ -108,18 +108,25 @@ async function logEvento(userId, tipo, pontos) {
   } catch {}
 }
 
-// 🔔 AVISO 10 MIN
+// 🔔 AVISO 10 MIN (COM CARGO)
 async function avisoAntesAbrir() {
   try {
     const canal = await client.channels.fetch(CANAL_AVISO_ID);
 
     await canal.send(
-`@everyone 🔔 AVISO IMPORTANTE
+`<@&1477683902079303932> 🔔 COMUNICADO INTERNO — HOSPITAL BELLA
 
-🏥 O EVENTO HOSPITAL BELLA VAI COMEÇAR EM 10 MINUTOS!
+Boa noite, tudo bem com vocês?
 
-⏰ Início: 18:00
-📢 Preparem-se!`
+🏥 Informamos que o plantão do Hospital Bella iniciará em 10 minutos.
+
+⏰ Início do evento: 18:00
+
+Pedimos que todos os funcionários se organizem e estejam prontos para o atendimento.
+
+📢 Contamos com a presença e dedicação de todos.
+
+— Coordenação Hospital Bella`
     );
   } catch {}
 }
@@ -143,7 +150,7 @@ function gerarRanking() {
     .setDescription(text || "Sem dados");
 }
 
-// 📢 PAINEL (DESCRIÇÃO BONITA)
+// 📢 PAINEL
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
@@ -164,24 +171,24 @@ async function atualizarPainel() {
 🚑 **DESCRIÇÃO DO EVENTO**
 O Hospital Bella está em operação ativa para simulação de atendimentos médicos em tempo real.
 
-Avaliação baseada em:
-• Atendimentos realizados  
-• Chamados atendidos  
+Avaliação:
+• Atendimentos  
+• Chamados  
 • Tempo de resposta  
-• Eficiência geral  
+• Eficiência  
 
 ━━━━━━━━━━━━━━━━━━
 
-${eventoAtivo() ? "🟢 EVENTO ATIVO - SISTEMA EM OPERAÇÃO" : "🔴 EVENTO FECHADO - AGUARDANDO INÍCIO"}
+${eventoAtivo() ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
 
 👥 Participantes: ${Object.keys(db.users).length}
 
 ━━━━━━━━━━━━━━━━━━
 
-🏆 PREMIAÇÃO FINAL
-🥇 TOP 1 → 100 mil 💰  
-🥈 TOP 2 → 50 mil 💰  
-🥉 TOP 3 → 35 mil 💰`
+🏆 PREMIAÇÃO
+🥇 1º → 100k  
+🥈 2º → 50k  
+🥉 3º → 35k`
     );
 
   if (painelMsgId) {
@@ -193,7 +200,7 @@ ${eventoAtivo() ? "🟢 EVENTO ATIVO - SISTEMA EM OPERAÇÃO" : "🔴 EVENTO FEC
   }
 }
 
-// 🏁 FINALIZA EVENTO
+// 🏁 FINALIZAR EVENTO
 async function finalizarEvento() {
   if (finalizado) return;
   finalizado = true;
