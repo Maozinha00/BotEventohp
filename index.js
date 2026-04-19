@@ -38,7 +38,7 @@ const CARGO_3 = "1495374557404594267";
 // 📌 CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 
-// 📅 EVENTO (BRASIL -03:00)
+// 📅 EVENTO
 let EVENTO_INICIO = Date.parse("2026-04-19T18:00:00-03:00");
 let EVENTO_FIM = Date.parse("2026-04-19T21:00:00-03:00");
 
@@ -56,10 +56,8 @@ function getUser(id) {
 
 function eventoAberto() {
   const agora = Date.now();
-
   if (eventoManual === true) return true;
   if (eventoManual === false) return false;
-
   return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
 }
 
@@ -72,27 +70,15 @@ let painelMsgId = null;
 // 🔘 BOTÕES
 function botoes() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("atendimento")
-      .setLabel("🏥 Atendimento")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId("chamado")
-      .setLabel("📞 Chamado")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("ranking")
-      .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
   );
 }
 
 // 📢 PAINEL
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-
   const status = eventoAberto() ? "aberto" : "fechado";
 
   const ranking = Object.entries(db.users)
@@ -100,30 +86,50 @@ async function atualizarPainel() {
     .slice(0, 3);
 
   let topText = "";
-  ranking.forEach(([id, data], i) => {
-    topText += `\n${i + 1}. <@${id}> — ${data.pontos} pts`;
+  ranking.forEach(([id, d], i) => {
+    topText += `\n${i + 1}. <@${id}> — ${d.pontos} pts`;
   });
 
   const embed = new EmbedBuilder()
     .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
-    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setTitle("📢 EVENTO HOSPITAL BELLA - SISTEMA OFICIAL")
     .setDescription(
-`<@&${CARGO_PING}>
+`🚨 **SISTEMA DE EVENTO AUTOMATIZADO - HOSPITAL BELLA RP**
 
-🚨 EVENTO ESPECIAL
+━━━━━━━━━━━━━━━━━━━━━━
 
-📅 INÍCIO: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
-⏰ FIM: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
+📅 **DATA DO EVENTO**
+• Início: ${new Date(EVENTO_INICIO).toLocaleString("pt-BR")}
+• Fim: ${new Date(EVENTO_FIM).toLocaleString("pt-BR")}
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 
-${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+📌 **INFORMAÇÕES GERAIS**
+• Apenas membros com cargo de serviço podem participar
+• Sistema de pontuação ativo em tempo real
+• Ranking atualizado automaticamente
 
-👥 PARTICIPANTES: ${Object.keys(db.users).length}
+━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━
+⚠️ **REGRAS OBRIGATÓRIAS**
+• Proibido uso de multi-contas
+• Respeitar staff
 
-🏆 TOP 3:${topText}`
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 **OBJETIVO DO EVENTO**
+• Atendimento hospitalar (+1 ponto)
+• Chamados de emergência (+2 pontos)
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${status === "aberto" ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
+
+👥 Participantes: ${Object.keys(db.users).length}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🏆 **TOP 3**${topText}`
     );
 
   if (painelMsgId) {
@@ -135,28 +141,18 @@ ${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
   }
 }
 
-// 🚀 SLASH COMMANDS
+// 🚀 COMANDOS
 const commands = [
-  new SlashCommandBuilder()
-    .setName("abrirevento")
-    .setDescription("Abrir evento"),
-
-  new SlashCommandBuilder()
-    .setName("fecharevento")
-    .setDescription("Fechar evento"),
-
-  new SlashCommandBuilder()
-    .setName("painelconfig")
-    .setDescription("Configurar data e hora do evento")
+  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
+  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento"),
+  new SlashCommandBuilder().setName("painelhora").setDescription("Configurar data e hora do evento")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.once("ready", async () => {
   console.log(`✅ Online: ${client.user.tag}`);
-
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-
   setTimeout(atualizarPainel, 3000);
 });
 
@@ -178,14 +174,14 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
-      user.pontos++;
-      return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
+      user.pontos += 1;
+      return interaction.reply({ content: "🏥 Atendimento registrado (+1)", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
-      user.pontos++;
-      return interaction.reply({ content: "📞 Registrado", ephemeral: true });
+      user.pontos += 2;
+      return interaction.reply({ content: "📞 Chamado registrado (+2)", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -202,34 +198,24 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // ⚙️ CONFIGURAÇÃO DO EVENTO
+  // ⚙️ PAINEL HORA
   if (interaction.isChatInputCommand()) {
 
-    if (!member.permissions.has(PermissionFlagsBits.Administrator))
-      return interaction.reply({ content: "🚫 Apenas staff", ephemeral: true });
+    if (interaction.commandName === "painelhora") {
 
-    if (interaction.commandName === "painelconfig") {
+      const embed = new EmbedBuilder()
+        .setTitle("⚙️ CONFIGURAR EVENTO")
+        .setDescription("Use o formato:\nYYYY-MM-DD HH:mm\nEx: 2026-04-19 18:00")
+        .setColor("#00aaff");
 
-      const modal = new ModalBuilder()
-        .setCustomId("config_evento")
-        .setTitle("Configurar Evento");
-
-      const inicio = new TextInputBuilder()
-        .setCustomId("inicio")
-        .setLabel("Início (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      const fim = new TextInputBuilder()
-        .setCustomId("fim")
-        .setLabel("Fim (YYYY-MM-DD HH:mm)")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(inicio),
-        new ActionRowBuilder().addComponents(fim)
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("config_evento")
+          .setLabel("🕒 Alterar Data/Hora")
+          .setStyle(ButtonStyle.Primary)
       );
 
-      return interaction.showModal(modal);
+      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
     }
 
     if (interaction.commandName === "abrirevento") {
