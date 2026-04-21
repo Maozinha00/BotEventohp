@@ -5,11 +5,16 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } from "discord.js";
 
 // 🔐 CONFIG
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 // 👮 CARGOS
 const CARGO_SERVICO_ID = "1492553421973356795";
@@ -24,10 +29,6 @@ const CARGO_3 = "1495374557404594267";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 const CANAL_AVISO_ID = "1477683904315134215";
-
-// ⏰ EVENTO
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 
 // 📊 DB
 const db = { users: {} };
@@ -52,52 +53,6 @@ function getUser(id) {
 }
 
 // =====================
-// ⏰ EVENTO
-// =====================
-function eventoAtivo() {
-  const now = Date.now();
-  return now >= EVENTO_INICIO.getTime() && now <= EVENTO_FIM.getTime();
-}
-
-// =====================
-// 🚫 COOLDOWN
-// =====================
-const cooldown = new Map();
-const COOLDOWN_TIME = 5000;
-
-function podeClicar(id) {
-  const now = Date.now();
-  const last = cooldown.get(id);
-
-  if (last && now - last < COOLDOWN_TIME) return false;
-
-  cooldown.set(id, now);
-  return true;
-}
-
-// =====================
-// 🔘 BOTÕES PRINCIPAIS
-// =====================
-function botoes() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
-  );
-}
-
-// =====================
-// 🗳️ ENQUETE BOTÕES
-// =====================
-function botoesEnquete() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("vote_24").setLabel("📅 24/04").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("vote_25").setLabel("📅 25/04").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("vote_26").setLabel("📅 26/04").setStyle(ButtonStyle.Primary)
-  );
-}
-
-// =====================
 // 🗳️ ENQUETE EMBED
 // =====================
 function embedEnquete() {
@@ -105,14 +60,23 @@ function embedEnquete() {
     .setColor("#5865F2")
     .setTitle("🗳️ ENQUETE DO EVENTO")
     .setDescription(
-`Escolha o melhor dia 👇
+`Escolha o dia do evento 👇
 
 📅 24/04 → ${poll["24"]} votos  
 📅 25/04 → ${poll["25"]} votos  
-📅 26/04 → ${poll["26"]} votos  
-
-Clique nos botões abaixo para votar!`
+📅 26/04 → ${poll["26"]} votos`
     );
+}
+
+// =====================
+// 🗳️ BOTÕES ENQUETE
+// =====================
+function botoesEnquete() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("vote_24").setLabel("📅 24/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_25").setLabel("📅 25/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_26").setLabel("📅 26/04").setStyle(ButtonStyle.Primary)
+  );
 }
 
 // =====================
@@ -145,26 +109,6 @@ async function atualizarEnquete() {
 }
 
 // =====================
-// 📊 LOG
-// =====================
-async function logEvento(userId, tipo, pontos) {
-  try {
-    const canal = await client.channels.fetch(CANAL_LOGS_ID);
-
-    const embed = new EmbedBuilder()
-      .setColor("#2f3136")
-      .setTitle("📊 LOG HOSPITAL BELLA")
-      .setDescription(
-`👤 <@${userId}>
-📌 ${tipo}
-⭐ +${pontos} pontos`
-      );
-
-    canal.send({ embeds: [embed] });
-  } catch {}
-}
-
-// =====================
 // 🏆 RANKING
 // =====================
 function gerarRanking() {
@@ -181,40 +125,40 @@ function gerarRanking() {
 
   return new EmbedBuilder()
     .setColor("#FFD700")
-    .setTitle("🏆 RANKING HOSPITAL BELLA")
+    .setTitle("🏆 RANKING")
     .setDescription(text || "Sem dados");
 }
 
 // =====================
-// 📢 PAINEL
+// 🔘 BOTÕES
 // =====================
-async function atualizarPainel() {
-  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+function botoes() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
+  );
+}
 
-  const embed = new EmbedBuilder()
-    .setColor(eventoAtivo() ? "#00ff00" : "#ff0000")
-    .setDescription(
-`<@&${CARGO_PING}>
+// =====================
+// 🧠 SLASH COMMAND (/enquete)
+// =====================
+async function registerCommands() {
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("enquete")
+      .setDescription("🗳️ Criar enquete do evento")
+      .toJSON()
+  ];
 
-🏥 EVENTO HOSPITAL BELLA
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-📅 19/04/2026  
-⏰ 18:00 → 21:00  
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
 
-━━━━━━━━━━━━━━━
-
-${eventoAtivo() ? "🟢 ATIVO" : "🔴 FECHADO"}
-
-👥 ${Object.keys(db.users).length} participantes`
-    );
-
-  if (painelMsgId) {
-    const msg = await canal.messages.fetch(painelMsgId);
-    await msg.edit({ embeds: [embed], components: [botoes()] });
-  } else {
-    const msg = await canal.send({ embeds: [embed], components: [botoes()] });
-    painelMsgId = msg.id;
-  }
+  console.log("✅ Slash /enquete registrado");
 }
 
 // =====================
@@ -223,9 +167,7 @@ ${eventoAtivo() ? "🟢 ATIVO" : "🔴 FECHADO"}
 client.once("ready", async () => {
   console.log(`🤖 Online: ${client.user.tag}`);
 
-  await atualizarPainel();
-
-  // 🗳️ ENQUETE ENTRA AQUI (NO MEIO DO BOT)
+  await registerCommands();
   await enviarEnquete();
 });
 
@@ -233,14 +175,19 @@ client.once("ready", async () => {
 // 🎮 INTERAÇÕES
 // =====================
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.guild) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
-  const user = getUser(interaction.user.id);
+  // 🗳️ SLASH COMMAND
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === "enquete") {
+      await enviarEnquete();
+      return interaction.reply({ content: "🗳️ Enquete criada!", ephemeral: true });
+    }
+  }
 
+  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
-    // 🗳️ VOTOS ENQUETE
+    // 🗳️ VOTOS
     if (interaction.customId.startsWith("vote_")) {
       const key = interaction.customId.replace("vote_", "");
 
@@ -256,15 +203,17 @@ client.on("interactionCreate", async (interaction) => {
 
     // 🏥 ATENDIMENTO
     if (interaction.customId === "atendimento") {
+      const user = getUser(interaction.user.id);
       user.pontos += 1;
-      await logEvento(interaction.user.id, "ATENDIMENTO", 1);
+
       return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
     // 📞 CHAMADO
     if (interaction.customId === "chamado") {
+      const user = getUser(interaction.user.id);
       user.pontos += 2;
-      await logEvento(interaction.user.id, "CHAMADO", 2);
+
       return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
