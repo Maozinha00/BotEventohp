@@ -30,14 +30,14 @@ const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 const CANAL_AVISO_ID = "1477683904315134215";
 
-// 📊 DB (memória temporária)
+// 📊 DB
 const db = { users: {} };
 
 // 🗳️ ENQUETE
 const poll = { "24": 0, "25": 0, "26": 0 };
 let pollMsgId = null;
 
-// 🤖 CLIENT
+// 🤖 BOT
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -45,8 +45,14 @@ const client = new Client({
   ]
 });
 
+// 🚨 SEGURANÇA (evita bot não ligar)
+if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.log("❌ Falta TOKEN, CLIENT_ID ou GUILD_ID no .env");
+  process.exit(1);
+}
+
 // =====================
-// 👤 USER DB
+// 👤 USER
 // =====================
 function getUser(id) {
   if (!db.users[id]) {
@@ -88,7 +94,7 @@ function botoesEnquete() {
 async function enviarEnquete() {
   try {
     const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-    if (!canal) return console.log("❌ Canal da enquete não encontrado");
+    if (!canal) return console.log("❌ Canal painel não encontrado");
 
     const msg = await canal.send({
       embeds: [embedEnquete()],
@@ -97,7 +103,7 @@ async function enviarEnquete() {
 
     pollMsgId = msg.id;
   } catch (err) {
-    console.error("❌ Erro ao enviar enquete:", err);
+    console.error("❌ Erro enquete:", err);
   }
 }
 
@@ -116,7 +122,7 @@ async function atualizarEnquete() {
       components: [botoesEnquete()]
     });
   } catch (err) {
-    console.error("❌ Erro ao atualizar enquete:", err);
+    console.error("❌ Erro update enquete:", err);
   }
 }
 
@@ -138,11 +144,11 @@ function gerarRanking() {
   return new EmbedBuilder()
     .setColor("#FFD700")
     .setTitle("🏆 RANKING")
-    .setDescription(text || "Sem dados ainda");
+    .setDescription(text || "Sem dados");
 }
 
 // =====================
-// BOTÕES PAINEL
+// BOTÕES
 // =====================
 function botoes() {
   return new ActionRowBuilder().addComponents(
@@ -177,7 +183,7 @@ async function registerCommands() {
 // READY
 // =====================
 client.once("ready", async () => {
-  console.log(`🤖 Online como ${client.user.tag}`);
+  console.log(`🤖 Online: ${client.user.tag}`);
 
   await registerCommands();
   await enviarEnquete();
@@ -199,9 +205,11 @@ client.on("interactionCreate", async (interaction) => {
 
     // 🗳️ VOTOS
     if (interaction.customId.startsWith("vote_")) {
-      const key = interaction.customId.replace("vote_", "");
+      const key = interaction.customId.split("_")[1];
 
-      poll[key]++;
+      if (poll[key] !== undefined) {
+        poll[key] += 1;
+      }
 
       await atualizarEnquete();
 
