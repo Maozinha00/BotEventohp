@@ -30,20 +30,23 @@ const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 const CANAL_AVISO_ID = "1477683904315134215";
 
-// 📊 DB
+// 📊 DB (memória temporária)
 const db = { users: {} };
 
 // 🗳️ ENQUETE
 const poll = { "24": 0, "25": 0, "26": 0 };
 let pollMsgId = null;
 
-// 🤖 BOT
+// 🤖 CLIENT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 // =====================
-// 👤 USER
+// 👤 USER DB
 // =====================
 function getUser(id) {
   if (!db.users[id]) {
@@ -53,7 +56,7 @@ function getUser(id) {
 }
 
 // =====================
-// 🗳️ ENQUETE EMBED
+// 🗳️ EMBED ENQUETE
 // =====================
 function embedEnquete() {
   return new EmbedBuilder()
@@ -69,7 +72,7 @@ function embedEnquete() {
 }
 
 // =====================
-// 🗳️ BOTÕES ENQUETE
+// BOTÕES ENQUETE
 // =====================
 function botoesEnquete() {
   return new ActionRowBuilder().addComponents(
@@ -80,32 +83,41 @@ function botoesEnquete() {
 }
 
 // =====================
-// 📢 ENVIAR ENQUETE
+// ENVIAR ENQUETE
 // =====================
 async function enviarEnquete() {
-  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+  try {
+    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+    if (!canal) return console.log("❌ Canal da enquete não encontrado");
 
-  const msg = await canal.send({
-    embeds: [embedEnquete()],
-    components: [botoesEnquete()]
-  });
+    const msg = await canal.send({
+      embeds: [embedEnquete()],
+      components: [botoesEnquete()]
+    });
 
-  pollMsgId = msg.id;
+    pollMsgId = msg.id;
+  } catch (err) {
+    console.error("❌ Erro ao enviar enquete:", err);
+  }
 }
 
 // =====================
-// 🔄 ATUALIZAR ENQUETE
+// ATUALIZAR ENQUETE
 // =====================
 async function atualizarEnquete() {
-  if (!pollMsgId) return;
+  try {
+    if (!pollMsgId) return;
 
-  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-  const msg = await canal.messages.fetch(pollMsgId);
+    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+    const msg = await canal.messages.fetch(pollMsgId);
 
-  await msg.edit({
-    embeds: [embedEnquete()],
-    components: [botoesEnquete()]
-  });
+    await msg.edit({
+      embeds: [embedEnquete()],
+      components: [botoesEnquete()]
+    });
+  } catch (err) {
+    console.error("❌ Erro ao atualizar enquete:", err);
+  }
 }
 
 // =====================
@@ -126,11 +138,11 @@ function gerarRanking() {
   return new EmbedBuilder()
     .setColor("#FFD700")
     .setTitle("🏆 RANKING")
-    .setDescription(text || "Sem dados");
+    .setDescription(text || "Sem dados ainda");
 }
 
 // =====================
-// 🔘 BOTÕES
+// BOTÕES PAINEL
 // =====================
 function botoes() {
   return new ActionRowBuilder().addComponents(
@@ -141,7 +153,7 @@ function botoes() {
 }
 
 // =====================
-// 🧠 SLASH COMMAND (/enquete)
+// SLASH COMMAND
 // =====================
 async function registerCommands() {
   const commands = [
@@ -162,21 +174,20 @@ async function registerCommands() {
 }
 
 // =====================
-// 🚀 READY
+// READY
 // =====================
 client.once("ready", async () => {
-  console.log(`🤖 Online: ${client.user.tag}`);
+  console.log(`🤖 Online como ${client.user.tag}`);
 
   await registerCommands();
   await enviarEnquete();
 });
 
 // =====================
-// 🎮 INTERAÇÕES
+// INTERAÇÕES
 // =====================
 client.on("interactionCreate", async (interaction) => {
 
-  // 🗳️ SLASH COMMAND
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === "enquete") {
       await enviarEnquete();
@@ -184,7 +195,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     // 🗳️ VOTOS
@@ -219,9 +229,13 @@ client.on("interactionCreate", async (interaction) => {
 
     // 🏆 RANKING
     if (interaction.customId === "ranking") {
-      return interaction.reply({ embeds: [gerarRanking()], ephemeral: true });
+      return interaction.reply({
+        embeds: [gerarRanking()],
+        ephemeral: true
+      });
     }
   }
 });
 
+// =====================
 client.login(TOKEN);
