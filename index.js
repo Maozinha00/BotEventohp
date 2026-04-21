@@ -32,6 +32,18 @@ const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
 // 📊 DB
 const db = { users: {} };
 
+// 🗳️ ENQUETE
+const poll = { "24": 0, "25": 0, "26": 0 };
+let pollMsgId = null;
+
+// 🤖 BOT
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+});
+
+// =====================
+// 👤 USER
+// =====================
 function getUser(id) {
   if (!db.users[id]) {
     db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
@@ -39,13 +51,17 @@ function getUser(id) {
   return db.users[id];
 }
 
-// ⏰ STATUS
+// =====================
+// ⏰ EVENTO
+// =====================
 function eventoAtivo() {
   const now = Date.now();
   return now >= EVENTO_INICIO.getTime() && now <= EVENTO_FIM.getTime();
 }
 
+// =====================
 // 🚫 COOLDOWN
+// =====================
 const cooldown = new Map();
 const COOLDOWN_TIME = 5000;
 
@@ -59,36 +75,78 @@ function podeClicar(id) {
   return true;
 }
 
-// 🤖 BOT
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
-});
-
-let painelMsgId = null;
-let avisoEnviado = false;
-let finalizado = false;
-
-// 🔘 BOTÕES
+// =====================
+// 🔘 BOTÕES PRINCIPAIS
+// =====================
 function botoes() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("atendimento")
-      .setLabel("🏥 Atendimento")
-      .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-      .setCustomId("chamado")
-      .setLabel("📞 Chamado")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("ranking")
-      .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
   );
 }
 
+// =====================
+// 🗳️ ENQUETE BOTÕES
+// =====================
+function botoesEnquete() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("vote_24").setLabel("📅 24/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_25").setLabel("📅 25/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_26").setLabel("📅 26/04").setStyle(ButtonStyle.Primary)
+  );
+}
+
+// =====================
+// 🗳️ ENQUETE EMBED
+// =====================
+function embedEnquete() {
+  return new EmbedBuilder()
+    .setColor("#5865F2")
+    .setTitle("🗳️ ENQUETE DO EVENTO")
+    .setDescription(
+`Escolha o melhor dia 👇
+
+📅 24/04 → ${poll["24"]} votos  
+📅 25/04 → ${poll["25"]} votos  
+📅 26/04 → ${poll["26"]} votos  
+
+Clique nos botões abaixo para votar!`
+    );
+}
+
+// =====================
+// 📢 ENVIAR ENQUETE
+// =====================
+async function enviarEnquete() {
+  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+
+  const msg = await canal.send({
+    embeds: [embedEnquete()],
+    components: [botoesEnquete()]
+  });
+
+  pollMsgId = msg.id;
+}
+
+// =====================
+// 🔄 ATUALIZAR ENQUETE
+// =====================
+async function atualizarEnquete() {
+  if (!pollMsgId) return;
+
+  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+  const msg = await canal.messages.fetch(pollMsgId);
+
+  await msg.edit({
+    embeds: [embedEnquete()],
+    components: [botoesEnquete()]
+  });
+}
+
+// =====================
 // 📊 LOG
+// =====================
 async function logEvento(userId, tipo, pontos) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS_ID);
@@ -97,36 +155,18 @@ async function logEvento(userId, tipo, pontos) {
       .setColor("#2f3136")
       .setTitle("📊 LOG HOSPITAL BELLA")
       .setDescription(
-        `👤 <@${userId}>
+`👤 <@${userId}>
 📌 ${tipo}
-⭐ +${pontos} pontos
-⏰ ${new Date().toLocaleTimeString("pt-BR")}`
+⭐ +${pontos} pontos`
       );
 
-    await canal.send({ embeds: [embed] });
+    canal.send({ embeds: [embed] });
   } catch {}
 }
 
-// 🔔 AVISO
-async function avisoAntesAbrir() {
-  try {
-    const canal = await client.channels.fetch(CANAL_AVISO_ID);
-
-    await canal.send(
-`<@&${CARGO_PING}> 🔔 COMUNICADO INTERNO — HOSPITAL BELLA
-
-🏥 O plantão iniciará em 10 minutos.
-
-⏰ Início: 18:00
-
-Por favor, se organizem.
-
-— Coordenação Hospital Bella`
-    );
-  } catch {}
-}
-
+// =====================
 // 🏆 RANKING
+// =====================
 function gerarRanking() {
   const ranking = Object.entries(db.users)
     .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -145,7 +185,9 @@ function gerarRanking() {
     .setDescription(text || "Sem dados");
 }
 
+// =====================
 // 📢 PAINEL
+// =====================
 async function atualizarPainel() {
   const canal = await client.channels.fetch(CANAL_PAINEL_ID);
 
@@ -154,32 +196,16 @@ async function atualizarPainel() {
     .setDescription(
 `<@&${CARGO_PING}>
 
-🏥 **EVENTO HP — HOSPITAL BELLA**
+🏥 EVENTO HOSPITAL BELLA
 
 📅 19/04/2026  
 ⏰ 18:00 → 21:00  
 
 ━━━━━━━━━━━━━━━
 
-🚑 Sistema de atendimento ativo
+${eventoAtivo() ? "🟢 ATIVO" : "🔴 FECHADO"}
 
-📊 Avaliação:
-• Atendimentos
-• Chamados
-• Eficiência
-
-━━━━━━━━━━━━━━━
-
-${eventoAtivo() ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
-
-👥 Participantes: ${Object.keys(db.users).length}
-
-━━━━━━━━━━━━━━━
-
-🏆 PREMIAÇÃO
-🥇 1º → 100k  
-🥈 2º → 50k  
-🥉 3º → 35k`
+👥 ${Object.keys(db.users).length} participantes`
     );
 
   if (painelMsgId) {
@@ -191,56 +217,62 @@ ${eventoAtivo() ? "🟢 EVENTO ATIVO" : "🔴 EVENTO FECHADO"}
   }
 }
 
-// 🏁 FINALIZAR
-async function finalizarEvento() {
-  if (finalizado) return;
-  finalizado = true;
-
-  const guild = client.guilds.cache.first();
-
-  const ranking = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
-
-  for (let i = 0; i < ranking.length; i++) {
-    const [id] = ranking[i];
-
-    const member = await guild.members.fetch(id).catch(() => null);
-    if (!member) continue;
-
-    const cargo =
-      i === 0 ? CARGO_1 :
-      i === 1 ? CARGO_2 :
-      CARGO_3;
-
-    await member.roles.add(cargo);
-  }
-}
-
-// 🔥 LOOP
-setInterval(async () => {
-  const now = Date.now();
-
-  const diff = EVENTO_INICIO.getTime() - now;
-
-  if (diff <= 10 * 60 * 1000 && diff > 9 * 60 * 1000 && !avisoEnviado) {
-    await avisoAntesAbrir();
-    avisoEnviado = true;
-  }
-
-  try {
-    await atualizarPainel();
-  } catch {}
-
-  if (now > EVENTO_FIM.getTime() && !finalizado) {
-    await finalizarEvento();
-  }
-}, 5000);
-
+// =====================
 // 🚀 READY
+// =====================
 client.once("ready", async () => {
-  console.log(`✅ Online: ${client.user.tag}`);
+  console.log(`🤖 Online: ${client.user.tag}`);
+
   await atualizarPainel();
+
+  // 🗳️ ENQUETE ENTRA AQUI (NO MEIO DO BOT)
+  await enviarEnquete();
+});
+
+// =====================
+// 🎮 INTERAÇÕES
+// =====================
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.guild) return;
+
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const user = getUser(interaction.user.id);
+
+  if (interaction.isButton()) {
+
+    // 🗳️ VOTOS ENQUETE
+    if (interaction.customId.startsWith("vote_")) {
+      const key = interaction.customId.replace("vote_", "");
+
+      poll[key]++;
+
+      await atualizarEnquete();
+
+      return interaction.reply({
+        content: "🗳️ Voto registrado!",
+        ephemeral: true
+      });
+    }
+
+    // 🏥 ATENDIMENTO
+    if (interaction.customId === "atendimento") {
+      user.pontos += 1;
+      await logEvento(interaction.user.id, "ATENDIMENTO", 1);
+      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
+    }
+
+    // 📞 CHAMADO
+    if (interaction.customId === "chamado") {
+      user.pontos += 2;
+      await logEvento(interaction.user.id, "CHAMADO", 2);
+      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
+    }
+
+    // 🏆 RANKING
+    if (interaction.customId === "ranking") {
+      return interaction.reply({ embeds: [gerarRanking()], ephemeral: true });
+    }
+  }
 });
 
 client.login(TOKEN);
