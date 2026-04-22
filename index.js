@@ -1,4 +1,3 @@
-import "dotenv/config";
 import {
   Client,
   GatewayIntentBits,
@@ -11,16 +10,16 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🔐 CONFIG
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// 🔐 CONFIG (COLOCA AQUI)
+const TOKEN = "MTQ5Mzk0ODU2ODA3ODI1ODM0Nw.GTXfSQ.GkQNhWn5M-qJSOQzVyPXWgXhJFfZ9RWhmrijts";
+const CLIENT_ID = "1493948568078258347";
+const GUILD_ID = "1477683902041690342";
 
 // 👮 CARGOS
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
-// 🏆 TOP 3 CARGOS
+// 🏆 TOP 3
 const CARGO_1 = "1477683902100410424";
 const CARGO_2 = "1495374426815074304";
 const CARGO_3 = "1495374557404594267";
@@ -30,7 +29,7 @@ const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 const CANAL_AVISO_ID = "1477683904315134215";
 
-// 📊 DB
+// 📊 DB (memória)
 const db = { users: {} };
 
 // 🗳️ ENQUETE
@@ -45,18 +44,12 @@ const client = new Client({
   ]
 });
 
-// 🚨 SEGURANÇA (evita bot não ligar)
-if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.log("❌ Falta TOKEN, CLIENT_ID ou GUILD_ID no .env");
-  process.exit(1);
-}
-
 // =====================
 // 👤 USER
 // =====================
 function getUser(id) {
   if (!db.users[id]) {
-    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
+    db.users[id] = { pontos: 0 };
   }
   return db.users[id];
 }
@@ -94,7 +87,7 @@ function botoesEnquete() {
 async function enviarEnquete() {
   try {
     const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-    if (!canal) return console.log("❌ Canal painel não encontrado");
+    if (!canal) return console.log("❌ Canal não encontrado");
 
     const msg = await canal.send({
       embeds: [embedEnquete()],
@@ -122,7 +115,7 @@ async function atualizarEnquete() {
       components: [botoesEnquete()]
     });
   } catch (err) {
-    console.error("❌ Erro update enquete:", err);
+    console.error("❌ Erro update:", err);
   }
 }
 
@@ -144,17 +137,17 @@ function gerarRanking() {
   return new EmbedBuilder()
     .setColor("#FFD700")
     .setTitle("🏆 RANKING")
-    .setDescription(text || "Sem dados");
+    .setDescription(text || "Sem dados ainda");
 }
 
 // =====================
-// BOTÕES
+// BOTÕES SISTEMA
 // =====================
-function botoes() {
+function botoesSistema() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("ranking").setLabel("🏆 Ranking").setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -165,9 +158,11 @@ async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
       .setName("enquete")
-      .setDescription("🗳️ Criar enquete do evento")
-      .toJSON()
-  ];
+      .setDescription("Criar enquete do evento"),
+    new SlashCommandBuilder()
+      .setName("painel")
+      .setDescription("Enviar painel de pontos")
+  ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -176,7 +171,7 @@ async function registerCommands() {
     { body: commands }
   );
 
-  console.log("✅ Slash /enquete registrado");
+  console.log("✅ Comandos registrados");
 }
 
 // =====================
@@ -184,9 +179,7 @@ async function registerCommands() {
 // =====================
 client.once("ready", async () => {
   console.log(`🤖 Online: ${client.user.tag}`);
-
   await registerCommands();
-  await enviarEnquete();
 });
 
 // =====================
@@ -194,32 +187,43 @@ client.once("ready", async () => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
 
+  // SLASH
   if (interaction.isChatInputCommand()) {
+
     if (interaction.commandName === "enquete") {
       await enviarEnquete();
       return interaction.reply({ content: "🗳️ Enquete criada!", ephemeral: true });
     }
+
+    if (interaction.commandName === "painel") {
+      return interaction.reply({
+        content: "📊 Painel enviado!",
+        ephemeral: true,
+        components: [botoesSistema()]
+      });
+    }
   }
 
+  // BOTÕES
   if (interaction.isButton()) {
 
-    // 🗳️ VOTOS
+    // VOTOS
     if (interaction.customId.startsWith("vote_")) {
       const key = interaction.customId.split("_")[1];
 
       if (poll[key] !== undefined) {
-        poll[key] += 1;
+        poll[key]++;
       }
 
       await atualizarEnquete();
 
       return interaction.reply({
-        content: "🗳️ Voto registrado!",
+        content: "✅ Voto registrado!",
         ephemeral: true
       });
     }
 
-    // 🏥 ATENDIMENTO
+    // ATENDIMENTO
     if (interaction.customId === "atendimento") {
       const user = getUser(interaction.user.id);
       user.pontos += 1;
@@ -227,7 +231,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
-    // 📞 CHAMADO
+    // CHAMADO
     if (interaction.customId === "chamado") {
       const user = getUser(interaction.user.id);
       user.pontos += 2;
@@ -235,7 +239,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
-    // 🏆 RANKING
+    // RANKING
     if (interaction.customId === "ranking") {
       return interaction.reply({
         embeds: [gerarRanking()],
