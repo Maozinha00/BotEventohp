@@ -11,7 +11,7 @@ import {
 } from "discord.js";
 
 // 🔐 CONFIG
-const TOKEN = "MTQ5Mzk0ODU2ODA3ODI1ODM0Nw.GflTKx.y8Nw5BIgv5pPowVxEI6uQNWWnZyf8da9u7den0";
+const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1493948568078258347";
 const GUILD_ID = "1477683902041690342";
 
