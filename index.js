@@ -53,18 +53,56 @@ async function log(msg) {
 }
 
 // =====================
-// ENQUETE
+// 📢 EVENTO HP
+// =====================
+function embedEvento() {
+  return new EmbedBuilder()
+    .setColor("#2ecc71")
+    .setTitle("🏥 EVENTO HP — HOSPITAL BELLA")
+    .setDescription(
+`@|⚕️| Membro HP
+
+📢 **Sistema oficial de atendimentos e chamados em operação**
+
+📅 **Data:** 19/04/2026  
+⏰ **Horário:** 18:00 → 21:00  
+
+━━━━━━━━━━━━━━━━━━
+
+🚑 **DESCRIÇÃO DO EVENTO**  
+O Hospital Bella estará em operação ativa para simulação de atendimentos médicos em tempo real.
+
+📊 **Avaliação:**  
+• Atendimentos  
+• Chamados  
+• Tempo de resposta  
+• Eficiência  
+
+━━━━━━━━━━━━━━━━━━
+
+🔴 **EVENTO FECHADO**  
+👥 Participantes: 4  
+
+━━━━━━━━━━━━━━━━━━
+
+🏆 **PREMIAÇÃO**  
+🥇 1º → 100k  
+🥈 2º → 50k  
+🥉 3º → 35k`
+    );
+}
+
+// =====================
+// 🗳️ ENQUETE
 // =====================
 function embedEnquete() {
   return new EmbedBuilder()
     .setColor("#5865F2")
     .setTitle("🗳️ ENQUETE MÉDICA")
     .setDescription(
-`👨‍⚕️ **Atenção equipe médica**
+`👨‍⚕️ **A equipe médica está de acordo com qual data?**
 
-Os médicos estão de acordo com qual dia é melhor para o evento?
-
-Escolha abaixo 👇
+Escolha o melhor dia 👇
 
 📅 24/04 → ${poll["24"]} votos  
 📅 25/04 → ${poll["25"]} votos  
@@ -81,15 +119,10 @@ function botoesEnquete() {
 }
 
 // =====================
-// ENVIAR / ATUALIZAR ENQUETE
+// ENVIAR ENQUETE
 // =====================
 async function enviarEnquete(canal) {
-
-  // salvar canal usado
-  if (canal) {
-    pollChannelId = canal.id;
-  }
-
+  if (canal) pollChannelId = canal.id;
   if (!pollChannelId) return;
 
   const channel = await client.channels.fetch(pollChannelId);
@@ -113,7 +146,7 @@ async function enviarEnquete(canal) {
 }
 
 // =====================
-// RANKING
+// 🏆 RANKING
 // =====================
 function gerarRanking() {
   const ranking = Object.entries(db.users)
@@ -130,6 +163,9 @@ function gerarRanking() {
     .setDescription(text || "Sem dados");
 }
 
+// =====================
+// BOTÕES SISTEMA
+// =====================
 function botoesSistema() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
@@ -143,12 +179,23 @@ function botoesSistema() {
 // =====================
 async function registerCommands() {
   const commands = [
+
+    new SlashCommandBuilder()
+      .setName("evento")
+      .setDescription("Enviar painel do evento")
+      .addChannelOption(option =>
+        option.setName("canal")
+          .setDescription("Canal do evento")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(true)
+      ),
+
     new SlashCommandBuilder()
       .setName("enquete")
       .setDescription("Criar enquete médica")
       .addChannelOption(option =>
         option.setName("canal")
-          .setDescription("Escolha o canal")
+          .setDescription("Canal da enquete")
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(true)
       ),
@@ -162,6 +209,7 @@ async function registerCommands() {
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(true)
       )
+
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -187,12 +235,25 @@ client.once("ready", async () => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
 
-  // SLASH
   if (interaction.isChatInputCommand()) {
 
-    if (interaction.commandName === "enquete") {
+    // EVENTO
+    if (interaction.commandName === "evento") {
       const canal = interaction.options.getChannel("canal");
 
+      await canal.send({
+        embeds: [embedEvento()]
+      });
+
+      return interaction.reply({
+        content: `✅ Evento enviado em ${canal}`,
+        ephemeral: true
+      });
+    }
+
+    // ENQUETE
+    if (interaction.commandName === "enquete") {
+      const canal = interaction.options.getChannel("canal");
       await enviarEnquete(canal);
 
       return interaction.reply({
@@ -201,6 +262,7 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
+    // PAINEL
     if (interaction.commandName === "painel") {
       const canal = interaction.options.getChannel("canal");
 
@@ -222,13 +284,9 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.customId.startsWith("vote_")) {
       const key = interaction.customId.split("_")[1];
       poll[key]++;
-
       await enviarEnquete();
 
-      return interaction.reply({
-        content: "🗳️ Voto registrado!",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "🗳️ Voto registrado!", ephemeral: true });
     }
 
     if (interaction.customId === "atendimento") {
