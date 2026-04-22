@@ -7,7 +7,8 @@ import {
   ButtonStyle,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ChannelType
 } from "discord.js";
 
 // 🔐 CONFIG
@@ -15,8 +16,7 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1493948568078258347";
 const GUILD_ID = "1477683902041690342";
 
-// 📌 CANAIS
-const CANAL_PAINEL_ID = "1477683908026961940";
+// 📌 LOGS
 const CANAL_LOGS_ID = "1495370353193521182";
 
 // 📊 DB
@@ -25,6 +25,7 @@ const db = { users: {} };
 // 🗳️ ENQUETE
 const poll = { "24": 0, "25": 0, "26": 0 };
 let pollMsgId = null;
+let pollChannelId = null;
 
 // 🤖 BOT
 const client = new Client({
@@ -57,9 +58,13 @@ async function log(msg) {
 function embedEnquete() {
   return new EmbedBuilder()
     .setColor("#5865F2")
-    .setTitle("🗳️ ENQUETE DO EVENTO")
+    .setTitle("🗳️ ENQUETE MÉDICA")
     .setDescription(
-`Escolha o dia:
+`👨‍⚕️ **Atenção equipe médica**
+
+Os médicos estão de acordo com qual dia é melhor para o evento?
+
+Escolha abaixo 👇
 
 📅 24/04 → ${poll["24"]} votos  
 📅 25/04 → ${poll["25"]} votos  
@@ -69,18 +74,29 @@ function embedEnquete() {
 
 function botoesEnquete() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("vote_24").setLabel("24/04").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("vote_25").setLabel("25/04").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("vote_26").setLabel("26/04").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId("vote_24").setLabel("📅 24/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_25").setLabel("📅 25/04").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("vote_26").setLabel("📅 26/04").setStyle(ButtonStyle.Primary)
   );
 }
 
-async function enviarEnquete() {
-  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+// =====================
+// ENVIAR / ATUALIZAR ENQUETE
+// =====================
+async function enviarEnquete(canal) {
+
+  // salvar canal usado
+  if (canal) {
+    pollChannelId = canal.id;
+  }
+
+  if (!pollChannelId) return;
+
+  const channel = await client.channels.fetch(pollChannelId);
 
   if (pollMsgId) {
     try {
-      const msg = await canal.messages.fetch(pollMsgId);
+      const msg = await channel.messages.fetch(pollMsgId);
       return msg.edit({
         embeds: [embedEnquete()],
         components: [botoesEnquete()]
@@ -88,7 +104,7 @@ async function enviarEnquete() {
     } catch {}
   }
 
-  const msg = await canal.send({
+  const msg = await channel.send({
     embeds: [embedEnquete()],
     components: [botoesEnquete()]
   });
@@ -123,12 +139,29 @@ function botoesSistema() {
 }
 
 // =====================
-// SLASH
+// SLASH COMMANDS
 // =====================
 async function registerCommands() {
   const commands = [
-    new SlashCommandBuilder().setName("enquete").setDescription("Criar enquete"),
-    new SlashCommandBuilder().setName("painel").setDescription("Enviar painel")
+    new SlashCommandBuilder()
+      .setName("enquete")
+      .setDescription("Criar enquete médica")
+      .addChannelOption(option =>
+        option.setName("canal")
+          .setDescription("Escolha o canal")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(true)
+      ),
+
+    new SlashCommandBuilder()
+      .setName("painel")
+      .setDescription("Enviar painel de pontos")
+      .addChannelOption(option =>
+        option.setName("canal")
+          .setDescription("Canal do painel")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(true)
+      )
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -137,13 +170,15 @@ async function registerCommands() {
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
+
+  console.log("✅ Comandos registrados");
 }
 
 // =====================
 // READY
 // =====================
 client.once("ready", async () => {
-  console.log(`✅ Logado como ${client.user.tag}`);
+  console.log(`🤖 Online: ${client.user.tag}`);
   await registerCommands();
 });
 
@@ -152,38 +187,50 @@ client.once("ready", async () => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
 
+  // SLASH
   if (interaction.isChatInputCommand()) {
 
     if (interaction.commandName === "enquete") {
-      await enviarEnquete();
-      return interaction.reply({ content: "✅ Enquete enviada", ephemeral: true });
+      const canal = interaction.options.getChannel("canal");
+
+      await enviarEnquete(canal);
+
+      return interaction.reply({
+        content: `🗳️ Enquete enviada em ${canal}`,
+        ephemeral: true
+      });
     }
 
     if (interaction.commandName === "painel") {
-      const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+      const canal = interaction.options.getChannel("canal");
 
       await canal.send({
-        content: "📊 Painel de pontos",
+        content: "📊 Painel da equipe médica",
         components: [botoesSistema()]
       });
 
-      return interaction.reply({ content: "✅ Painel enviado", ephemeral: true });
+      return interaction.reply({
+        content: `✅ Painel enviado em ${canal}`,
+        ephemeral: true
+      });
     }
   }
 
+  // BOTÕES
   if (interaction.isButton()) {
 
-    // VOTO
     if (interaction.customId.startsWith("vote_")) {
       const key = interaction.customId.split("_")[1];
       poll[key]++;
 
       await enviarEnquete();
 
-      return interaction.reply({ content: "🗳️ Voto registrado", ephemeral: true });
+      return interaction.reply({
+        content: "🗳️ Voto registrado!",
+        ephemeral: true
+      });
     }
 
-    // ATENDIMENTO
     if (interaction.customId === "atendimento") {
       const user = getUser(interaction.user.id);
       user.pontos += 1;
@@ -191,7 +238,6 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "+1 ponto", ephemeral: true });
     }
 
-    // CHAMADO
     if (interaction.customId === "chamado") {
       const user = getUser(interaction.user.id);
       user.pontos += 2;
@@ -199,7 +245,6 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "+2 pontos", ephemeral: true });
     }
 
-    // RANKING
     if (interaction.customId === "ranking") {
       return interaction.reply({
         embeds: [gerarRanking()],
