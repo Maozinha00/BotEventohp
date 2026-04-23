@@ -8,14 +8,12 @@ import {
   ButtonStyle,
   EmbedBuilder,
   REST,
-  Routes,
-  SlashCommandBuilder
+  Routes
 } from "discord.js";
 
 // 🌐 KEEP ALIVE
 const app = express();
 app.get("/", (_, res) => res.send("Bot online 🔥"));
-client.login(TOKEN);
 app.listen(3000);
 
 // 🔐 ENV
@@ -43,7 +41,7 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 🔘 BOTÕES
+// 🔘 BOTÕES DO EVENTO
 function rowEvento() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -62,21 +60,22 @@ function rowEvento() {
 const EVENTO_START = new Date("2026-04-24T19:00:00");
 const EVENTO_END = new Date("2026-04-24T20:30:00");
 
-// 🧠 CHECAR EVENTO AUTOMÁTICO
+// 🧠 SISTEMA AUTOMÁTICO DO EVENTO
 setInterval(async () => {
-  const agora = new Date();
+  try {
+    const agora = new Date();
 
-  // ABRIR
-  if (!eventoAtivo && agora >= EVENTO_START && agora < EVENTO_END) {
-    eventoAtivo = true;
-    console.log("📢 Evento iniciado");
+    // 🟢 ABRIR EVENTO
+    if (!eventoAtivo && agora >= EVENTO_START && agora < EVENTO_END) {
+      eventoAtivo = true;
+      console.log("📢 Evento iniciado");
 
-    const canal = await client.channels.fetch(GUILD_ID);
+      const canal = await client.channels.fetch(GUILD_ID);
 
-    const embed = new EmbedBuilder()
-      .setColor("#00ff00")
-      .setTitle("🏥 EVENTO HOSPITAL BELLA INICIADO")
-      .setDescription(`
+      const embed = new EmbedBuilder()
+        .setColor("#00ff00")
+        .setTitle("🏥 EVENTO HOSPITAL BELLA INICIADO")
+        .setDescription(`
 📅 Data: 24/04/2026
 ⏰ 19:00 até 20:30
 
@@ -84,44 +83,47 @@ setInterval(async () => {
 • Atendimento = 1 ponto
 • Chamado = 2 pontos
 
-🟢 Apenas quem está em SERVIÇO pode participar
-      `);
+🟢 Apenas quem está EM SERVIÇO pode participar
+        `);
 
-    const msg = await canal.send({
-      embeds: [embed],
-      components: [rowEvento()]
-    });
+      const msg = await canal.send({
+        embeds: [embed],
+        components: [rowEvento()]
+      });
 
-    msgEventoId = msg.id;
-  }
+      msgEventoId = msg.id;
+    }
 
-  // FECHAR
-  if (eventoAtivo && agora >= EVENTO_END) {
-    eventoAtivo = false;
+    // 🔴 FECHAR EVENTO
+    if (eventoAtivo && agora >= EVENTO_END) {
+      eventoAtivo = false;
+      console.log("🏁 Evento finalizado");
 
-    const canal = await client.channels.fetch(GUILD_ID);
+      const canal = await client.channels.fetch(GUILD_ID);
 
-    let top = [...ranking.entries()]
-      .sort((a,b) => b[1] - a[1])
-      .slice(0, 3);
+      const top = [...ranking.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
 
-    const embed = new EmbedBuilder()
-      .setColor("#ff0000")
-      .setTitle("🏁 EVENTO FINALIZADO")
-      .setDescription(`
+      const embed = new EmbedBuilder()
+        .setColor("#ff0000")
+        .setTitle("🏁 EVENTO FINALIZADO")
+        .setDescription(`
 🏆 RESULTADO FINAL:
 
 🥇 <@${top[0]?.[0] || "Nenhum"}> — ${top[0]?.[1] || 0} pts
 🥈 <@${top[1]?.[0] || "Nenhum"}> — ${top[1]?.[1] || 0} pts
 🥉 <@${top[2]?.[0] || "Nenhum"}> — ${top[2]?.[1] || 0} pts
-      `);
+        `);
 
-    if (msgEventoId) {
-      const msg = await canal.messages.fetch(msgEventoId);
-      await msg.edit({ embeds: [embed], components: [] });
+      if (msgEventoId) {
+        const msg = await canal.messages.fetch(msgEventoId);
+        await msg.edit({ embeds: [embed], components: [] });
+      }
     }
+  } catch (err) {
+    console.log("Erro evento:", err.message);
   }
-
 }, 30000);
 
 // 🎯 INTERAÇÕES
@@ -131,13 +133,20 @@ client.on("interactionCreate", async (i) => {
   const member = i.member;
   const id = i.user.id;
 
-  // 🚫 SÓ EM SERVIÇO PODE
+  // ❌ bloqueio sem cargo
   if (!member.roles.cache.has(CARGO_SERVICO)) {
-    return i.reply({ content: "❌ Apenas EM SERVIÇO pode participar!", ephemeral: true });
+    return i.reply({
+      content: "❌ Apenas EM SERVIÇO pode participar!",
+      ephemeral: true
+    });
   }
 
+  // ❌ evento fechado
   if (!eventoAtivo) {
-    return i.reply({ content: "❌ Evento não está ativo", ephemeral: true });
+    return i.reply({
+      content: "❌ Evento não está ativo",
+      ephemeral: true
+    });
   }
 
   // 🏥 Atendimento = 1 ponto
@@ -153,5 +162,10 @@ client.on("interactionCreate", async (i) => {
   }
 });
 
-// 🚀 LOGIN
+// 🚀 READY
+client.once("ready", () => {
+  console.log(`🔥 Online: ${client.user.tag}`);
+});
+
+// 🚀 LOGIN (CORRIGIDO)
 client.login(TOKEN);
