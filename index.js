@@ -1,109 +1,49 @@
 import "dotenv/config";
+import express from "express";
 import {
   Client,
   GatewayIntentBits,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   REST,
   Routes,
   SlashCommandBuilder
 } from "discord.js";
 
-// CONFIG
+// 🌐 KEEP ALIVE
+const app = express();
+app.get("/", (_, res) => res.send("Bot online 🔥"));
+app.listen(3000);
+
+// 🔐 ENV
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
-if (!TOKEN || !CLIENT_ID) {
-  console.error("❌ TOKEN ou CLIENT_ID não configurados");
-  process.exit(1);
-}
+// 🛡️ CARGO EM SERVIÇO (SÓ ESSE PODE PARTICIPAR)
+const CARGO_SERVICO = "1492553421973356795";
 
-// CARGOS
-const CARGO_ADMIN_ID = "1490431614055088128";
-const CARGO_SERVICO_ID = "1492553421973356795";
-const CARGO_PING = "1477683902079303932";
+// 🏆 CARGOS DE PREMIAÇÃO
+const CARGO_1 = "1477683902100410424"; // 1º lugar
+const CARGO_2 = "1495374426815074304"; // 2º lugar
+const CARGO_3 = "1495374557404594267"; // 3º lugar
 
-// CANAIS
-const CANAL_PAINEL_ID = "1477683908026961940";
-const CANAL_LOGS_ID = "1495370353193521182";
+// 🧠 SISTEMA
+let eventoAtivo = false;
+let msgEventoId = null;
+const ranking = new Map();
 
-// EVENTO
-let EVENTO_INICIO = new Date("2026-04-24T18:00:00-03:00").getTime();
-let EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00").getTime();
-
-// DB
-const db = { users: {} };
-const participantes = new Set();
-const cooldown = new Map();
-
-// FUNÇÕES
-function getUser(id) {
-  if (!db.users[id]) {
-    db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
-  }
-  return db.users[id];
-}
-
-function eventoAtivo() {
-  const now = Date.now();
-  return now >= EVENTO_INICIO && now <= EVENTO_FIM;
-}
-
-// BOT
+// 🤖 BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-// 📢 EMBED MELHORADO (SEM MEXER NA ESTRUTURA)
-function painel() {
-  const ativo = eventoAtivo();
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-  return new EmbedBuilder()
-    .setColor(ativo ? "#00ff00" : "#ff0000")
-    .setTitle("🏥 HOSPITAL BELLA — EVENTO OFICIAL")
-    .setDescription(
-`<@&${CARGO_PING}>
-
-━━━━━━━━━━━━━━━━━━━
-💙 **PLANTÃO HOSPITAL BELLA**
-━━━━━━━━━━━━━━━━━━━
-
-📅 Data: 24/04/2026  
-⏰ Horário: 18:00 às 21:00  
-
-━━━━━━━━━━━━━━━━━━━
-
-🚨 **SISTEMA DE ATENDIMENTO EM OPERAÇÃO**
-
-Durante este período, o Hospital Bella estará em modo de simulação ativa, onde a equipe realizará atendimentos e chamados em tempo real.
-
-📌 Atividades do evento:
-• Atendimento de pacientes  
-• Registro de chamados  
-• Resposta rápida da equipe  
-• Organização do plantão  
-
-━━━━━━━━━━━━━━━━━━━
-
-${ativo ? "🟢 STATUS: EVENTO EM ANDAMENTO" : "🔴 STATUS: EVENTO FECHADO"}
-
-👥 Participantes ativos: ${participantes.size}
-
-━━━━━━━━━━━━━━━━━━━
-
-🏆 PREMIAÇÃO FINAL
-🥇 100.000$  
-🥈 60.000$  
-🥉 30.000$  
-
-━━━━━━━━━━━━━━━━━━━`
-    );
-}
-
-// BOTÕES (MANTIDO)
-function buttons() {
+// 🔘 BOTÕES
+function rowEvento() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("atendimento")
@@ -113,134 +53,104 @@ function buttons() {
     new ButtonBuilder()
       .setCustomId("chamado")
       .setLabel("📞 Chamado (+2)")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("ranking")
-      .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
-// LOG (MANTIDO)
-async function log(user, tipo) {
-  try {
-    const canal = await client.channels.fetch(CANAL_LOGS_ID);
-    canal.send(`👤 <@${user}> fez **${tipo}** às ${new Date().toLocaleTimeString("pt-BR")}`);
-  } catch {}
-}
+// 📅 HORÁRIO DO EVENTO
+const EVENTO_START = new Date("2026-04-24T19:00:00");
+const EVENTO_END = new Date("2026-04-24T20:30:00");
 
-// PAINEL
-let painelMsg = null;
+// 🧠 CHECAR EVENTO AUTOMÁTICO
+setInterval(async () => {
+  const agora = new Date();
 
-async function atualizarPainel() {
-  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-  if (!canal) return;
+  // ABRIR
+  if (!eventoAtivo && agora >= EVENTO_START && agora < EVENTO_END) {
+    eventoAtivo = true;
+    console.log("📢 Evento iniciado");
 
-  const embed = painel();
+    const canal = await client.channels.fetch(GUILD_ID);
 
-  if (painelMsg) {
-    const msg = await canal.messages.fetch(painelMsg);
-    await msg.edit({ embeds: [embed], components: [buttons()] });
-  } else {
-    const msg = await canal.send({ embeds: [embed], components: [buttons()] });
-    painelMsg = msg.id;
+    const embed = new EmbedBuilder()
+      .setColor("#00ff00")
+      .setTitle("🏥 EVENTO HOSPITAL BELLA INICIADO")
+      .setDescription(`
+📅 Data: 24/04/2026
+⏰ 19:00 até 20:30
+
+🏆 REGRAS:
+• Atendimento = 1 ponto
+• Chamado = 2 pontos
+
+🟢 Apenas quem está em SERVIÇO pode participar
+      `);
+
+    const msg = await canal.send({
+      embeds: [embed],
+      components: [rowEvento()]
+    });
+
+    msgEventoId = msg.id;
   }
-}
 
-// LOOP (MANTIDO)
-setInterval(atualizarPainel, 5000);
+  // FECHAR
+  if (eventoAtivo && agora >= EVENTO_END) {
+    eventoAtivo = false;
 
-// COMANDOS
-const commands = [
-  new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
-  new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
-].map(c => c.toJSON());
+    const canal = await client.channels.fetch(GUILD_ID);
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+    let top = [...ranking.entries()]
+      .sort((a,b) => b[1] - a[1])
+      .slice(0, 3);
 
-// READY
-client.once("ready", async () => {
-  console.log(`✅ ${client.user.tag} online`);
+    const embed = new EmbedBuilder()
+      .setColor("#ff0000")
+      .setTitle("🏁 EVENTO FINALIZADO")
+      .setDescription(`
+🏆 RESULTADO FINAL:
 
-  await rest.put(Routes.applicationCommands(CLIENT_ID), {
-    body: commands
-  });
+🥇 <@${top[0]?.[0] || "Nenhum"}> — ${top[0]?.[1] || 0} pts
+🥈 <@${top[1]?.[0] || "Nenhum"}> — ${top[1]?.[1] || 0} pts
+🥉 <@${top[2]?.[0] || "Nenhum"}> — ${top[2]?.[1] || 0} pts
+      `);
 
-  atualizarPainel();
-});
+    if (msgEventoId) {
+      const msg = await canal.messages.fetch(msgEventoId);
+      await msg.edit({ embeds: [embed], components: [] });
+    }
+  }
 
-// INTERAÇÕES (SEM MEXER NA LÓGICA)
+}, 30000);
+
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (i) => {
-  if (!i.guild) return;
+  if (!i.isButton()) return;
 
-  const member = await i.guild.members.fetch(i.user.id);
+  const member = i.member;
+  const id = i.user.id;
 
-  // BOTÕES
-  if (i.isButton()) {
-
-    if (cooldown.has(i.user.id)) {
-      const tempo = cooldown.get(i.user.id);
-      if (Date.now() < tempo) {
-        return i.reply({ content: "⏳ Aguarde 5 segundos...", ephemeral: true });
-      }
-    }
-
-    cooldown.set(i.user.id, Date.now() + 5000);
-
-    if (!eventoAtivo())
-      return i.reply({ content: "⛔ Evento fechado", ephemeral: true });
-
-    if (!member.roles.cache.has(CARGO_SERVICO_ID))
-      return i.reply({ content: "🚫 Apenas membros em serviço podem usar", ephemeral: true });
-
-    const user = getUser(i.user.id);
-    participantes.add(i.user.id);
-
-    if (i.customId === "atendimento") {
-      user.atendimentos++;
-      user.pontos += 1;
-      await log(i.user.id, "Atendimento");
-      return i.reply({ content: "🏥 +1 ponto", ephemeral: true });
-    }
-
-    if (i.customId === "chamado") {
-      user.chamados++;
-      user.pontos += 2;
-      await log(i.user.id, "Chamado");
-      return i.reply({ content: "📞 +2 pontos", ephemeral: true });
-    }
-
-    if (i.customId === "ranking") {
-      const ranking = Object.entries(db.users)
-        .sort((a, b) => b[1].pontos - a[1].pontos)
-        .slice(0, 3);
-
-      let msg = "🏆 TOP 3\n\n";
-      ranking.forEach(([id, d], i) => {
-        msg += `${i + 1}. <@${id}> — ${d.pontos} pts\n`;
-      });
-
-      return i.reply({ content: msg || "Sem dados", ephemeral: true });
-    }
+  // 🚫 SÓ EM SERVIÇO PODE
+  if (!member.roles.cache.has(CARGO_SERVICO)) {
+    return i.reply({ content: "❌ Apenas EM SERVIÇO pode participar!", ephemeral: true });
   }
 
-  // COMANDOS STAFF (MANTIDO)
-  if (i.isChatInputCommand()) {
+  if (!eventoAtivo) {
+    return i.reply({ content: "❌ Evento não está ativo", ephemeral: true });
+  }
 
-    if (!member.roles.cache.has(CARGO_ADMIN_ID))
-      return i.reply({ content: "🚫 Apenas STAFF", ephemeral: true });
+  // 🏥 Atendimento = 1 ponto
+  if (i.customId === "atendimento") {
+    ranking.set(id, (ranking.get(id) || 0) + 1);
+    return i.reply({ content: "+1 ponto (Atendimento)", ephemeral: true });
+  }
 
-    if (i.commandName === "abrirevento") {
-      EVENTO_INICIO = Date.now() - 1000;
-      return i.reply({ content: "🟢 Evento aberto", ephemeral: true });
-    }
-
-    if (i.commandName === "fecharevento") {
-      EVENTO_FIM = Date.now() - 1000;
-      return i.reply({ content: "🔴 Evento fechado", ephemeral: true });
-    }
+  // 📞 Chamado = 2 pontos
+  if (i.customId === "chamado") {
+    ranking.set(id, (ranking.get(id) || 0) + 2);
+    return i.reply({ content: "+2 pontos (Chamado)", ephemeral: true });
   }
 });
 
+// 🚀 LOGIN
 client.login(TOKEN);
