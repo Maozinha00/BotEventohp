@@ -56,7 +56,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-// EMBED
+// 📢 EMBED MELHORADO (SEM MEXER NA ESTRUTURA)
 function painel() {
   const ativo = eventoAtivo();
 
@@ -66,25 +66,43 @@ function painel() {
     .setDescription(
 `<@&${CARGO_PING}>
 
-📅 24/04/2026  
-⏰ 18:00 às 21:00  
+━━━━━━━━━━━━━━━━━━━
+💙 **PLANTÃO HOSPITAL BELLA**
+━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━
+📅 Data: 24/04/2026  
+⏰ Horário: 18:00 às 21:00  
 
-${ativo ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+━━━━━━━━━━━━━━━━━━━
 
-👥 Participantes: ${participantes.size}
+🚨 **SISTEMA DE ATENDIMENTO EM OPERAÇÃO**
 
-━━━━━━━━━━━━━━━━━━
+Durante este período, o Hospital Bella estará em modo de simulação ativa, onde a equipe realizará atendimentos e chamados em tempo real.
 
-🏆 PREMIAÇÃO
-🥇 100.000$
-🥈 60.000$
-🥉 30.000$`
+📌 Atividades do evento:
+• Atendimento de pacientes  
+• Registro de chamados  
+• Resposta rápida da equipe  
+• Organização do plantão  
+
+━━━━━━━━━━━━━━━━━━━
+
+${ativo ? "🟢 STATUS: EVENTO EM ANDAMENTO" : "🔴 STATUS: EVENTO FECHADO"}
+
+👥 Participantes ativos: ${participantes.size}
+
+━━━━━━━━━━━━━━━━━━━
+
+🏆 PREMIAÇÃO FINAL
+🥇 100.000$  
+🥈 60.000$  
+🥉 30.000$  
+
+━━━━━━━━━━━━━━━━━━━`
     );
 }
 
-// BOTÕES
+// BOTÕES (MANTIDO)
 function buttons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -104,7 +122,7 @@ function buttons() {
   );
 }
 
-// LOG
+// LOG (MANTIDO)
 async function log(user, tipo) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS_ID);
@@ -130,7 +148,7 @@ async function atualizarPainel() {
   }
 }
 
-// LOOP
+// LOOP (MANTIDO)
 setInterval(atualizarPainel, 5000);
 
 // COMANDOS
@@ -152,7 +170,7 @@ client.once("ready", async () => {
   atualizarPainel();
 });
 
-// INTERAÇÃO
+// INTERAÇÕES (SEM MEXER NA LÓGICA)
 client.on("interactionCreate", async (i) => {
   if (!i.guild) return;
 
@@ -161,7 +179,6 @@ client.on("interactionCreate", async (i) => {
   // BOTÕES
   if (i.isButton()) {
 
-    // COOLDOWN 5s
     if (cooldown.has(i.user.id)) {
       const tempo = cooldown.get(i.user.id);
       if (Date.now() < tempo) {
@@ -175,7 +192,7 @@ client.on("interactionCreate", async (i) => {
       return i.reply({ content: "⛔ Evento fechado", ephemeral: true });
 
     if (!member.roles.cache.has(CARGO_SERVICO_ID))
-      return i.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
+      return i.reply({ content: "🚫 Apenas membros em serviço podem usar", ephemeral: true });
 
     const user = getUser(i.user.id);
     participantes.add(i.user.id);
@@ -208,7 +225,7 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // COMANDOS
+  // COMANDOS STAFF (MANTIDO)
   if (i.isChatInputCommand()) {
 
     if (!member.roles.cache.has(CARGO_ADMIN_ID))
