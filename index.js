@@ -11,7 +11,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🔐 CONFIG
+// CONFIG
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
@@ -20,22 +20,25 @@ if (!TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
-// 👮 CARGOS
+// CARGOS
 const CARGO_ADMIN_ID = "1490431614055088128";
 const CARGO_SERVICO_ID = "1492553421973356795";
 const CARGO_PING = "1477683902079303932";
 
-// 📌 CANAIS
+// CANAIS
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO (ATUALIZADO)
+// EVENTO
 let EVENTO_INICIO = new Date("2026-04-24T18:00:00-03:00").getTime();
 let EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00").getTime();
 
-// 📊 DB
+// DB
 const db = { users: {} };
+const participantes = new Set();
+const cooldown = new Map();
 
+// FUNÇÕES
 function getUser(id) {
   if (!db.users[id]) {
     db.users[id] = { atendimentos: 0, chamados: 0, pontos: 0 };
@@ -43,120 +46,94 @@ function getUser(id) {
   return db.users[id];
 }
 
-// ⏰ STATUS
 function eventoAtivo() {
   const now = Date.now();
   return now >= EVENTO_INICIO && now <= EVENTO_FIM;
 }
 
-// 👥 PARTICIPANTES
-const participantesAtuais = new Set();
-
-// 🤖 BOT
+// BOT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-// 📢 EMBED
-function painelInfo() {
-  const status = eventoAtivo();
+// EMBED
+function painel() {
+  const ativo = eventoAtivo();
 
   return new EmbedBuilder()
-    .setColor(status ? "#00ff00" : "#ff0000")
-    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setColor(ativo ? "#00ff00" : "#ff0000")
+    .setTitle("🏥 HOSPITAL BELLA — EVENTO OFICIAL")
     .setDescription(
 `<@&${CARGO_PING}>
 
-🚨 EVENTO ESPECIAL HOJE
-
 📅 24/04/2026  
-⏰ 18:00 ATÉ 21:00  
+⏰ 18:00 às 21:00  
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━
 
-📅 HOJE: ${new Date().toLocaleDateString("pt-BR")}
+${ativo ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
-${status ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+👥 Participantes: ${participantes.size}
 
-👥 PARTICIPANTES: ${participantesAtuais.size}
-
-━━━━━━━━━━━━━━━━━━━
-
-🏥 REGRAS
-• Cargo de serviço obrigatório  
-• Estar em serviço  
-• Usar botões  
-
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━
 
 🏆 PREMIAÇÃO
-🥇 100.000$  
-🥈 60.000$  
+🥇 100.000$
+🥈 60.000$
 🥉 30.000$`
     );
 }
 
-// 🔘 BOTÕES
-function botoes() {
+// BOTÕES
+function buttons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("atendimento")
-      .setLabel("🏥 Atendimento")
+      .setLabel("🏥 Atendimento (+1)")
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
       .setCustomId("chamado")
-      .setLabel("📞 Chamado")
+      .setLabel("📞 Chamado (+2)")
       .setStyle(ButtonStyle.Primary),
 
     new ButtonBuilder()
       .setCustomId("ranking")
       .setLabel("🏆 Ranking")
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
-// 📊 LOGS
-async function logEvento(user, tipo) {
+// LOG
+async function log(user, tipo) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS_ID);
-
-    await canal.send(
-`📊 LOG EVENTO
-
-👤 <@${user}>
-📌 ${tipo}
-⏰ ${new Date().toLocaleTimeString("pt-BR")}`
-    );
+    canal.send(`👤 <@${user}> fez **${tipo}** às ${new Date().toLocaleTimeString("pt-BR")}`);
   } catch {}
 }
 
-// 📢 PAINEL
-let painelMsgId = null;
+// PAINEL
+let painelMsg = null;
 
 async function atualizarPainel() {
-  try {
-    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-    if (!canal) return;
+  const canal = await client.channels.fetch(CANAL_PAINEL_ID);
+  if (!canal) return;
 
-    const embed = painelInfo();
+  const embed = painel();
 
-    if (painelMsgId) {
-      const msg = await canal.messages.fetch(painelMsgId);
-      await msg.edit({ embeds: [embed], components: [botoes()] });
-    } else {
-      const msg = await canal.send({ embeds: [embed], components: [botoes()] });
-      painelMsgId = msg.id;
-    }
-  } catch {}
+  if (painelMsg) {
+    const msg = await canal.messages.fetch(painelMsg);
+    await msg.edit({ embeds: [embed], components: [buttons()] });
+  } else {
+    const msg = await canal.send({ embeds: [embed], components: [buttons()] });
+    painelMsg = msg.id;
+  }
 }
 
-// 🔥 LOOP 5s
-setInterval(async () => {
-  await atualizarPainel();
-}, 5000);
+// LOOP
+setInterval(atualizarPainel, 5000);
 
-// 🚀 COMANDOS
+// COMANDOS
 const commands = [
   new SlashCommandBuilder().setName("abrirevento").setDescription("Abrir evento"),
   new SlashCommandBuilder().setName("fecharevento").setDescription("Fechar evento")
@@ -164,82 +141,87 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ✅ READY
+// READY
 client.once("ready", async () => {
-  console.log(`✅ Online: ${client.user.tag}`);
+  console.log(`✅ ${client.user.tag} online`);
 
   await rest.put(Routes.applicationCommands(CLIENT_ID), {
     body: commands
   });
 
-  await atualizarPainel();
+  atualizarPainel();
 });
 
-// 🎮 INTERAÇÕES
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.guild) return;
+// INTERAÇÃO
+client.on("interactionCreate", async (i) => {
+  if (!i.guild) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const member = await i.guild.members.fetch(i.user.id);
 
-  if (interaction.isButton()) {
+  // BOTÕES
+  if (i.isButton()) {
 
-    if (!eventoAtivo()) {
-      return interaction.reply({ content: "⛔ Evento fechado", ephemeral: true });
+    // COOLDOWN 5s
+    if (cooldown.has(i.user.id)) {
+      const tempo = cooldown.get(i.user.id);
+      if (Date.now() < tempo) {
+        return i.reply({ content: "⏳ Aguarde 5 segundos...", ephemeral: true });
+      }
     }
 
-    if (!member.roles.cache.has(CARGO_SERVICO_ID)) {
-      return interaction.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
-    }
+    cooldown.set(i.user.id, Date.now() + 5000);
 
-    const user = getUser(interaction.user.id);
-    participantesAtuais.add(interaction.user.id);
+    if (!eventoAtivo())
+      return i.reply({ content: "⛔ Evento fechado", ephemeral: true });
 
-    if (interaction.customId === "atendimento") {
+    if (!member.roles.cache.has(CARGO_SERVICO_ID))
+      return i.reply({ content: "🚫 Sem cargo de serviço", ephemeral: true });
+
+    const user = getUser(i.user.id);
+    participantes.add(i.user.id);
+
+    if (i.customId === "atendimento") {
       user.atendimentos++;
       user.pontos += 1;
-      await logEvento(interaction.user.id, "Atendimento");
-      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
+      await log(i.user.id, "Atendimento");
+      return i.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
-    if (interaction.customId === "chamado") {
+    if (i.customId === "chamado") {
       user.chamados++;
       user.pontos += 2;
-      await logEvento(interaction.user.id, "Chamado");
-      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
+      await log(i.user.id, "Chamado");
+      return i.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
-    if (interaction.customId === "ranking") {
+    if (i.customId === "ranking") {
       const ranking = Object.entries(db.users)
         .sort((a, b) => b[1].pontos - a[1].pontos)
         .slice(0, 3);
 
-      let text = "🏆 TOP 3\n\n";
-
-      ranking.forEach(([id, data], i) => {
-        text += `${i + 1}. <@${id}> — ${data.pontos} pts\n`;
+      let msg = "🏆 TOP 3\n\n";
+      ranking.forEach(([id, d], i) => {
+        msg += `${i + 1}. <@${id}> — ${d.pontos} pts\n`;
       });
 
-      return interaction.reply({ content: text || "Sem dados", ephemeral: true });
+      return i.reply({ content: msg || "Sem dados", ephemeral: true });
     }
   }
 
-  // 👮 STAFF
-  if (interaction.isChatInputCommand()) {
+  // COMANDOS
+  if (i.isChatInputCommand()) {
 
-    if (!member.roles.cache.has(CARGO_ADMIN_ID)) {
-      return interaction.reply({ content: "🚫 STAFF apenas", ephemeral: true });
-    }
+    if (!member.roles.cache.has(CARGO_ADMIN_ID))
+      return i.reply({ content: "🚫 Apenas STAFF", ephemeral: true });
 
-    if (interaction.commandName === "abrirevento") {
+    if (i.commandName === "abrirevento") {
       EVENTO_INICIO = Date.now() - 1000;
-      await atualizarPainel();
-      return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
+      return i.reply({ content: "🟢 Evento aberto", ephemeral: true });
     }
 
-    if (interaction.commandName === "fecharevento") {
+    if (i.commandName === "fecharevento") {
       EVENTO_FIM = Date.now() - 1000;
-      await atualizarPainel();
-      return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
+      return i.reply({ content: "🔴 Evento fechado", ephemeral: true });
     }
   }
 });
