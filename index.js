@@ -29,9 +29,9 @@ const CARGO_PING = "1477683902079303932";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO (HORÁRIO FIXO CORRETO)
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00").getTime();
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00").getTime();
+// 📅 EVENTO (ATUALIZADO)
+let EVENTO_INICIO = new Date("2026-04-24T18:00:00-03:00").getTime();
+let EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00").getTime();
 
 // 📊 DB
 const db = { users: {} };
@@ -69,7 +69,7 @@ function painelInfo() {
 
 🚨 EVENTO ESPECIAL HOJE
 
-📅 19/04/2026  
+📅 24/04/2026  
 ⏰ 18:00 ATÉ 21:00  
 
 ━━━━━━━━━━━━━━━━━━━
@@ -151,7 +151,7 @@ async function atualizarPainel() {
   } catch {}
 }
 
-// 🔥 LOOP REAL (ATUALIZA A CADA 5s)
+// 🔥 LOOP 5s
 setInterval(async () => {
   await atualizarPainel();
 }, 5000);
