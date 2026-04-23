@@ -15,6 +15,7 @@ import {
 // 🌐 KEEP ALIVE
 const app = express();
 app.get("/", (_, res) => res.send("Bot online 🔥"));
+client.login(TOKEN);
 app.listen(3000);
 
 // 🔐 ENV
