@@ -29,26 +29,9 @@ const CARGO_PING = "1477683902079303932";
 const CANAL_PAINEL_ID = "1477683908026961940";
 const CANAL_LOGS_ID = "1495370353193521182";
 
-// 📅 EVENTO
-const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00");
-const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00");
-
-// 🔥 STATUS
-function getEventoStatus() {
-  const agora = new Date();
-  if (agora >= EVENTO_INICIO && agora <= EVENTO_FIM) return "aberto";
-  return "fechado";
-}
-
-function eventoAtivo() {
-  return getEventoStatus() === "aberto";
-}
-
-// 👥 PARTICIPANTES
-const participantesAtuais = new Set();
-
-// 🔔 AVISO
-let avisoEnviado = false;
+// 📅 EVENTO (HORÁRIO FIXO CORRETO)
+const EVENTO_INICIO = new Date("2026-04-19T18:00:00-03:00").getTime();
+const EVENTO_FIM = new Date("2026-04-19T21:00:00-03:00").getTime();
 
 // 📊 DB
 const db = { users: {} };
@@ -60,10 +43,14 @@ function getUser(id) {
   return db.users[id];
 }
 
-// 📅 DATA
-function getDataHoje() {
-  return new Date().toLocaleDateString("pt-BR");
+// ⏰ STATUS
+function eventoAtivo() {
+  const now = Date.now();
+  return now >= EVENTO_INICIO && now <= EVENTO_FIM;
 }
+
+// 👥 PARTICIPANTES
+const participantesAtuais = new Set();
 
 // 🤖 BOT
 const client = new Client({
@@ -72,10 +59,10 @@ const client = new Client({
 
 // 📢 EMBED
 function painelInfo() {
-  const status = getEventoStatus();
+  const status = eventoAtivo();
 
   return new EmbedBuilder()
-    .setColor(status === "aberto" ? "#00ff00" : "#ff0000")
+    .setColor(status ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(
 `<@&${CARGO_PING}>
@@ -87,9 +74,9 @@ function painelInfo() {
 
 ━━━━━━━━━━━━━━━━━━━
 
-📅 HOJE: ${getDataHoje()}
+📅 HOJE: ${new Date().toLocaleDateString("pt-BR")}
 
-${status === "aberto" ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
+${status ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO"}
 
 👥 PARTICIPANTES: ${participantesAtuais.size}
 
@@ -155,36 +142,19 @@ async function atualizarPainel() {
     const embed = painelInfo();
 
     if (painelMsgId) {
-      try {
-        const msg = await canal.messages.fetch(painelMsgId);
-        return msg.edit({ embeds: [embed], components: [botoes()] });
-      } catch {}
+      const msg = await canal.messages.fetch(painelMsgId);
+      await msg.edit({ embeds: [embed], components: [botoes()] });
+    } else {
+      const msg = await canal.send({ embeds: [embed], components: [botoes()] });
+      painelMsgId = msg.id;
     }
-
-    const msg = await canal.send({ embeds: [embed], components: [botoes()] });
-    painelMsgId = msg.id;
   } catch {}
 }
 
-// ⏰ AUTO
+// 🔥 LOOP REAL (ATUALIZA A CADA 5s)
 setInterval(async () => {
-  const agora = new Date();
-  const h = agora.getHours();
-
-  const diff = EVENTO_INICIO - agora;
-
-  // 🔔 AVISO
-  if (diff <= 10 * 60 * 1000 && diff > 9 * 60 * 1000 && !avisoEnviado) {
-    const canal = await client.channels.fetch(CANAL_PAINEL_ID);
-    canal.send("⏰ @everyone EVENTO COMEÇA EM 10 MINUTOS!");
-    avisoEnviado = true;
-  }
-
-  if (h === 18 || h === 21) {
-    await atualizarPainel();
-  }
-
-}, 60000);
+  await atualizarPainel();
+}, 5000);
 
 // 🚀 COMANDOS
 const commands = [
@@ -202,7 +172,7 @@ client.once("ready", async () => {
     body: commands
   });
 
-  setTimeout(() => atualizarPainel(), 5000);
+  await atualizarPainel();
 });
 
 // 🎮 INTERAÇÕES
@@ -226,16 +196,16 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "atendimento") {
       user.atendimentos++;
-      user.pontos++;
+      user.pontos += 1;
       await logEvento(interaction.user.id, "Atendimento");
-      return interaction.reply({ content: "🏥 Registrado", ephemeral: true });
+      return interaction.reply({ content: "🏥 +1 ponto", ephemeral: true });
     }
 
     if (interaction.customId === "chamado") {
       user.chamados++;
-      user.pontos++;
+      user.pontos += 2;
       await logEvento(interaction.user.id, "Chamado");
-      return interaction.reply({ content: "📞 Registrado", ephemeral: true });
+      return interaction.reply({ content: "📞 +2 pontos", ephemeral: true });
     }
 
     if (interaction.customId === "ranking") {
@@ -261,13 +231,13 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "abrirevento") {
-      EVENTO_INICIO.setTime(Date.now() - 1000);
+      EVENTO_INICIO = Date.now() - 1000;
       await atualizarPainel();
       return interaction.reply({ content: "🟢 Evento aberto", ephemeral: true });
     }
 
     if (interaction.commandName === "fecharevento") {
-      EVENTO_FIM.setTime(Date.now() - 1000);
+      EVENTO_FIM = Date.now() - 1000;
       await atualizarPainel();
       return interaction.reply({ content: "🔴 Evento fechado", ephemeral: true });
     }
