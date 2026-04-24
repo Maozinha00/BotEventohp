@@ -6,18 +6,16 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  REST,
-  Routes,
-  SlashCommandBuilder
+  MessageFlags
 } from "discord.js";
 
 /* ================= CONFIG ================= */
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
 
 const CANAL_EVENTO = "1492553421973356795";
+const CANAL_LOGS = "1495370353193521182";
+
 const STAFF_ROLE = "1490431614055088128";
 
 const CARGO_1 = "1477683902100410424";
@@ -26,7 +24,7 @@ const CARGO_3 = "1495374557404594267";
 
 /* ================= DADOS ================= */
 
-const ranking = new Map(); // { id: { atendimento: 0, chamado: 0 } }
+const ranking = new Map();
 const cooldown = new Map();
 
 let eventoAtivo = false;
@@ -62,100 +60,129 @@ function checkCooldown(id) {
   return false;
 }
 
+/* ================= LOG ================= */
+
+async function log(client, texto) {
+  try {
+    const canal = await client.channels.fetch(CANAL_LOGS);
+    await canal.send(`📋 ${texto}`);
+  } catch (e) {
+    console.error("Erro log:", e);
+  }
+}
+
 /* ================= UPDATE EVENTO ================= */
 
 async function updateEvento(client) {
   if (!eventoAtivo) return;
 
-  const canal = await client.channels.fetch(CANAL_EVENTO);
+  try {
+    const canal = await client.channels.fetch(CANAL_EVENTO);
 
-  const sorted = [...ranking.entries()]
-    .sort((a, b) => {
-      const totalA = a[1].atendimento + a[1].chamado;
-      const totalB = b[1].atendimento + b[1].chamado;
-      return totalB - totalA;
-    })
-    .slice(0, 3);
+    const sorted = [...ranking.entries()]
+      .sort((a, b) => {
+        const totalA = a[1].atendimento + a[1].chamado;
+        const totalB = b[1].atendimento + b[1].chamado;
+        return totalB - totalA;
+      })
+      .slice(0, 3);
 
-  const medalhas = ["🥇", "🥈", "🥉"];
+    const medalhas = ["🥇", "🥈", "🥉"];
 
-  const lista = sorted.length
-    ? sorted.map(([id, d], i) =>
-        `${medalhas[i]} <@${id}> • 🩺 ${d.atendimento} | 📞 ${d.chamado}`
-      ).join("\n")
-    : "Sem dados";
+    const lista = sorted.length
+      ? sorted.map(([id, d], i) =>
+          `${medalhas[i]} <@${id}> • 🩺 ${d.atendimento} | 📞 ${d.chamado}`
+        ).join("\n")
+      : "Sem dados";
 
-  const embed = new EmbedBuilder()
-    .setColor("#22c55e")
-    .setTitle("🏥 EVENTO HOSPITAL BELLA • AO VIVO")
-    .setDescription(`
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("🏥 EVENTO HOSPITAL BELLA • AO VIVO")
+      .setDescription(`
 🏆 **TOP 3**
 ${lista}
 
 ────────────────────────────
-⏰ Evento ativo (19h às 21h)
+⏰ 19:00 às 21:00
 `)
-    .setTimestamp();
+      .setTimestamp();
 
-  if (msgEventoId) {
-    const msg = await canal.messages.fetch(msgEventoId);
-    await msg.edit({ embeds: [embed], components: [rowEvento()] });
-  } else {
-    const msg = await canal.send({ embeds: [embed], components: [rowEvento()] });
-    msgEventoId = msg.id;
+    if (msgEventoId) {
+      const msg = await canal.messages.fetch(msgEventoId);
+      await msg.edit({ embeds: [embed], components: [rowEvento()] });
+    } else {
+      const msg = await canal.send({ embeds: [embed], components: [rowEvento()] });
+      msgEventoId = msg.id;
+    }
+
+  } catch (e) {
+    console.error("Erro updateEvento:", e);
   }
 }
 
-/* ================= FINALIZAR EVENTO ================= */
+/* ================= FINALIZAR ================= */
 
 async function finalizarEvento(client) {
-  eventoAtivo = false;
+  try {
+    eventoAtivo = false;
 
-  const canal = await client.channels.fetch(CANAL_EVENTO);
-  const guild = canal.guild;
+    const canal = await client.channels.fetch(CANAL_EVENTO);
+    const guild = canal.guild;
 
-  const sorted = [...ranking.entries()]
-    .sort((a, b) => {
-      const totalA = a[1].atendimento + a[1].chamado;
-      const totalB = b[1].atendimento + b[1].chamado;
-      return totalB - totalA;
+    const sorted = [...ranking.entries()]
+      .sort((a, b) => {
+        const totalA = a[1].atendimento + a[1].chamado;
+        const totalB = b[1].atendimento + b[1].chamado;
+        return totalB - totalA;
+      });
+
+    const winners = sorted.slice(0, 3);
+
+    if (winners[0]) await guild.members.fetch(winners[0][0]).then(m => m.roles.add(CARGO_1));
+    if (winners[1]) await guild.members.fetch(winners[1][0]).then(m => m.roles.add(CARGO_2));
+    if (winners[2]) await guild.members.fetch(winners[2][0]).then(m => m.roles.add(CARGO_3));
+
+    await canal.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("Gold")
+          .setTitle("🏆 RESULTADO FINAL")
+          .setDescription(
+            winners.map(([id, d], i) =>
+              `#${i + 1} <@${id}> • 🩺 ${d.atendimento} | 📞 ${d.chamado}`
+            ).join("\n")
+          )
+      ]
     });
 
-  const winners = sorted.slice(0, 3);
+    await log(client, "Evento finalizado e cargos entregues!");
+    ranking.clear();
 
-  if (winners[0]) await guild.members.fetch(winners[0][0]).then(m => m.roles.add(CARGO_1));
-  if (winners[1]) await guild.members.fetch(winners[1][0]).then(m => m.roles.add(CARGO_2));
-  if (winners[2]) await guild.members.fetch(winners[2][0]).then(m => m.roles.add(CARGO_3));
-
-  await canal.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor("Gold")
-        .setTitle("🏆 RESULTADO DO EVENTO")
-        .setDescription(
-          winners.map(([id, d], i) =>
-            `#${i + 1} <@${id}> • 🩺 ${d.atendimento} | 📞 ${d.chamado}`
-          ).join("\n")
-        )
-    ]
-  });
-
-  ranking.clear();
+  } catch (e) {
+    console.error("Erro finalizarEvento:", e);
+  }
 }
 
 /* ================= AVISO ================= */
 
 async function avisoEvento(client) {
-  const canal = await client.channels.fetch(CANAL_EVENTO);
+  try {
+    const canal = await client.channels.fetch(CANAL_EVENTO);
 
-  await canal.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor("#facc15")
-        .setTitle("⚠️ EVENTO EM 20 MINUTOS")
-        .setDescription("Preparem-se médicos!")
-    ]
-  });
+    await canal.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#facc15")
+          .setTitle("⚠️ EVENTO EM 20 MINUTOS")
+          .setDescription("Preparem-se médicos!")
+      ]
+    });
+
+    await log(client, "Aviso de evento enviado (20 minutos)");
+
+  } catch (e) {
+    console.error("Erro aviso:", e);
+  }
 }
 
 /* ================= CLIENT ================= */
@@ -164,28 +191,24 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
 /* ================= READY ================= */
 
-client.once("ready", async () => {
-  console.log("🔥 Bot Online");
+client.once("clientReady", () => {
+  console.log("🔥 Bot 100% atualizado e online");
 
   setInterval(() => {
     const now = new Date();
-    const hora = now.getHours();
-    const minuto = now.getMinutes();
+    const h = now.getHours();
+    const m = now.getMinutes();
 
-    // aviso 18:40
-    if (hora === 18 && minuto === 40) avisoEvento(client);
+    if (h === 18 && m === 40) avisoEvento(client);
 
-    // iniciar 19:00
-    if (hora === 19 && minuto === 0 && !eventoAtivo) {
+    if (h === 19 && m === 0 && !eventoAtivo) {
       eventoAtivo = true;
+      log(client, "Evento iniciado automaticamente!");
     }
 
-    // finalizar 21:00
-    if (hora === 21 && minuto === 0 && eventoAtivo) {
+    if (h === 21 && m === 0 && eventoAtivo) {
       finalizarEvento(client);
     }
 
@@ -205,14 +228,14 @@ client.on("interactionCreate", async (interaction) => {
   if (!eventoAtivo) {
     return interaction.reply({
       content: "❌ Evento não está ativo",
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
   if (checkCooldown(id)) {
     return interaction.reply({
       content: "⏳ Aguarde 5 segundos",
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -222,17 +245,26 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "atendimento") {
     ranking.get(id).atendimento++;
+    await log(interaction.client, `<@${id}> registrou ATENDIMENTO`);
   }
 
   if (interaction.customId === "chamado") {
     ranking.get(id).chamado++;
+    await log(interaction.client, `<@${id}> registrou CHAMADO`);
   }
 
   return interaction.reply({
     content: "✅ Registrado!",
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   });
 
 });
 
-client.login(TOKEN);
+/* ================= ERROS ================= */
+
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
+
+/* ================= LOGIN ================= */
+
+client.login(TOKEN).catch(console.error);
