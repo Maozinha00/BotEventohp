@@ -13,10 +13,10 @@ import {
 
 const TOKEN = process.env.TOKEN;
 
-const CANAL_EVENTO = "1492553421973356795";
+const CANAL_EVENTO = "1477683908026961940";
 const CANAL_LOGS = "1495370353193521182";
 
-const STAFF_ROLE = "1490431614055088128";
+const CARGO_PARTICIPANTE = "1492553421973356795";
 
 const CARGO_1 = "1477683902100410424";
 const CARGO_2 = "1495374426815074304";
@@ -29,6 +29,7 @@ const cooldown = new Map();
 
 let eventoAtivo = false;
 let msgEventoId = null;
+let ultimoInicio = null;
 
 /* ================= BOTÕES ================= */
 
@@ -65,7 +66,17 @@ function checkCooldown(id) {
 async function log(client, texto) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS);
-    await canal.send(`📋 ${texto}`);
+
+    await canal.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#0ea5e9")
+          .setTitle("📋 LOG DO EVENTO")
+          .setDescription(texto)
+          .setTimestamp()
+      ]
+    });
+
   } catch (e) {
     console.error("Erro log:", e);
   }
@@ -155,7 +166,7 @@ async function finalizarEvento(client) {
       ]
     });
 
-    await log(client, "Evento finalizado e cargos entregues!");
+    await log(client, "🏁 Evento finalizado e cargos entregues!");
     ranking.clear();
 
   } catch (e) {
@@ -178,7 +189,7 @@ async function avisoEvento(client) {
       ]
     });
 
-    await log(client, "Aviso de evento enviado (20 minutos)");
+    await log(client, "⚠️ Aviso enviado (20 minutos)");
 
   } catch (e) {
     console.error("Erro aviso:", e);
@@ -194,7 +205,7 @@ const client = new Client({
 /* ================= READY ================= */
 
 client.once("clientReady", () => {
-  console.log("🔥 Bot 100% atualizado e online");
+  console.log("🔥 Bot online (versão final)");
 
   setInterval(() => {
     const now = new Date();
@@ -203,9 +214,10 @@ client.once("clientReady", () => {
 
     if (h === 18 && m === 40) avisoEvento(client);
 
-    if (h === 19 && m === 0 && !eventoAtivo) {
+    if (h === 19 && m === 0 && ultimoInicio !== now.getDate()) {
       eventoAtivo = true;
-      log(client, "Evento iniciado automaticamente!");
+      ultimoInicio = now.getDate();
+      log(client, "🟢 Evento iniciado automaticamente!");
     }
 
     if (h === 21 && m === 0 && eventoAtivo) {
@@ -224,10 +236,18 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
   const id = interaction.user.id;
+  const member = interaction.member;
 
   if (!eventoAtivo) {
     return interaction.reply({
       content: "❌ Evento não está ativo",
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (!member.roles.cache.has(CARGO_PARTICIPANTE)) {
+    return interaction.reply({
+      content: "❌ Apenas médicos podem participar!",
       flags: MessageFlags.Ephemeral
     });
   }
