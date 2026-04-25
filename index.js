@@ -17,7 +17,6 @@ const CANAL_EVENTO = "1477683908026961940";
 const CANAL_LOGS = "1495370353193521182";
 
 const CARGO_PARTICIPANTE = "1492553421973356795";
-
 const CARGO_1 = "1477683902100410424";
 const CARGO_2 = "1495374426815074304";
 const CARGO_3 = "1495374557404594267";
@@ -26,12 +25,14 @@ const CARGO_3 = "1495374557404594267";
 
 const ranking = new Map();
 const cooldown = new Map();
+const votosEnquete = new Map();
 
 let eventoAtivo = false;
 let msgEventoId = null;
+let enqueteEnviada = false;
 let ultimoInicio = null;
 
-/* ================= BOTÕES ================= */
+/* ================= BOTÕES EVENTO ================= */
 
 function rowEvento() {
   return new ActionRowBuilder().addComponents(
@@ -49,14 +50,56 @@ function rowEvento() {
   );
 }
 
+/* ================= ENQUETE ================= */
+
+function rowEnquete() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("enquete_01")
+      .setLabel("01/05")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("enquete_02")
+      .setLabel("02/05")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("enquete_03")
+      .setLabel("03/05")
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function enviarEnquete(client) {
+  if (enqueteEnviada) return;
+
+  const canal = await client.channels.fetch(CANAL_EVENTO);
+
+  const embed = new EmbedBuilder()
+    .setColor("#a855f7")
+    .setTitle("📊 ENQUETE OFICIAL DO EVENTO")
+    .setDescription(
+      "Escolha o melhor dia para o evento!\n\n" +
+      "🗓️ 01/05\n🗓️ 02/05\n🗓️ 03/05\n\n" +
+      "⚠️ Você só pode votar uma vez!"
+    )
+    .setFooter({ text: "Hospital Bella RP" });
+
+  await canal.send({
+    embeds: [embed],
+    components: [rowEnquete()]
+  });
+
+  enqueteEnviada = true;
+}
+
 /* ================= COOLDOWN ================= */
 
 function checkCooldown(id) {
   const now = Date.now();
   const last = cooldown.get(id) || 0;
-
   if (now - last < 5000) return true;
-
   cooldown.set(id, now);
   return false;
 }
@@ -66,7 +109,6 @@ function checkCooldown(id) {
 async function log(client, texto) {
   try {
     const canal = await client.channels.fetch(CANAL_LOGS);
-
     await canal.send({
       embeds: [
         new EmbedBuilder()
@@ -76,7 +118,6 @@ async function log(client, texto) {
           .setTimestamp()
       ]
     });
-
   } catch (e) {
     console.error("Erro log:", e);
   }
@@ -109,23 +150,21 @@ async function updateEvento(client) {
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
       .setTitle("🏥 EVENTO HOSPITAL BELLA • AO VIVO")
-      .setDescription(`
-🏆 **TOP 3**
-${lista}
-
-────────────────────────────
-⏰ 19:00 às 21:00
-`)
+      .setDescription(
+        `🏆 **TOP 3**\n${lista}\n\n────────────────────────────\n⏰ 19:00 às 21:00`
+      )
       .setTimestamp();
 
     if (msgEventoId) {
       const msg = await canal.messages.fetch(msgEventoId);
       await msg.edit({ embeds: [embed], components: [rowEvento()] });
     } else {
-      const msg = await canal.send({ embeds: [embed], components: [rowEvento()] });
+      const msg = await canal.send({
+        embeds: [embed],
+        components: [rowEvento()]
+      });
       msgEventoId = msg.id;
     }
-
   } catch (e) {
     console.error("Erro updateEvento:", e);
   }
@@ -140,12 +179,11 @@ async function finalizarEvento(client) {
     const canal = await client.channels.fetch(CANAL_EVENTO);
     const guild = canal.guild;
 
-    const sorted = [...ranking.entries()]
-      .sort((a, b) => {
-        const totalA = a[1].atendimento + a[1].chamado;
-        const totalB = b[1].atendimento + b[1].chamado;
-        return totalB - totalA;
-      });
+    const sorted = [...ranking.entries()].sort((a, b) => {
+      const totalA = a[1].atendimento + a[1].chamado;
+      const totalB = b[1].atendimento + b[1].chamado;
+      return totalB - totalA;
+    });
 
     const winners = sorted.slice(0, 3);
 
@@ -168,7 +206,6 @@ async function finalizarEvento(client) {
 
     await log(client, "🏁 Evento finalizado e cargos entregues!");
     ranking.clear();
-
   } catch (e) {
     console.error("Erro finalizarEvento:", e);
   }
@@ -190,7 +227,6 @@ async function avisoEvento(client) {
     });
 
     await log(client, "⚠️ Aviso enviado (20 minutos)");
-
   } catch (e) {
     console.error("Erro aviso:", e);
   }
@@ -212,6 +248,11 @@ client.once("clientReady", () => {
     const h = now.getHours();
     const m = now.getMinutes();
 
+    // 📊 ENQUETE ANTES DO EVENTO (18:20)
+    if (h === 18 && m === 20 && !enqueteEnviada) {
+      enviarEnquete(client);
+    }
+
     if (h === 18 && m === 40) avisoEvento(client);
 
     if (h === 19 && m === 0 && ultimoInicio !== now.getDate()) {
@@ -223,7 +264,6 @@ client.once("clientReady", () => {
     if (h === 21 && m === 0 && eventoAtivo) {
       finalizarEvento(client);
     }
-
   }, 60000);
 
   setInterval(() => updateEvento(client), 5000);
@@ -232,11 +272,29 @@ client.once("clientReady", () => {
 /* ================= INTERAÇÕES ================= */
 
 client.on("interactionCreate", async (interaction) => {
-
   if (!interaction.isButton()) return;
 
   const id = interaction.user.id;
   const member = interaction.member;
+
+  /* ================= ENQUETE ================= */
+  if (interaction.customId.startsWith("enquete_")) {
+    if (votosEnquete.has(id)) {
+      return interaction.reply({
+        content: "❌ Você já votou na enquete!",
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    votosEnquete.set(id, interaction.customId);
+
+    return interaction.reply({
+      content: "✅ Voto registrado com sucesso!",
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  /* ================= EVENTO ================= */
 
   if (!eventoAtivo) {
     return interaction.reply({
@@ -277,7 +335,6 @@ client.on("interactionCreate", async (interaction) => {
     content: "✅ Registrado!",
     flags: MessageFlags.Ephemeral
   });
-
 });
 
 /* ================= ERROS ================= */
